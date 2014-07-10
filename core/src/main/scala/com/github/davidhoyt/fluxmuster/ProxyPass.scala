@@ -1,4 +1,4 @@
-package com.github.davidhoyt.encabulator
+package com.github.davidhoyt.fluxmuster
 
 sealed trait ProxyPass[+A] {
   val ignore: Boolean

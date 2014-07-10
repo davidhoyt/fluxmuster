@@ -1,5 +1,6 @@
 *.class
 *.log
+*.tar
 
 # IntelliJ specific
 .idea/
