@@ -1,16 +1,11 @@
 package com.github.davidhoyt.fluxmuster
 
-
-import com.netflix.hystrix._
-import rx.lang.scala.Observable
-import rx.lang.scala.JavaConversions._
-
 import scala.concurrent.duration._
 
 case class HystrixConfiguration(group: String, command: String, timeout: Duration = 1.second)
 
 object Hystrix {
-  import com.netflix.hystrix._
+  import com.netflix.hystrix.{HystrixCommand, HystrixCommandGroupKey, HystrixCommandKey, HystrixCommandProperties}
   import rx.{Subscription, Subscriber}
   import scala.concurrent.ExecutionContext
   import scala.concurrent.{Promise, Future, future}
@@ -25,7 +20,7 @@ object Hystrix {
     require(configuration.timeout.isFinite(), s"Hystrix timeout must be a finite amount")
 
     (p2: ProxySpecification[A, B, B, C]) =>
-      ProxySpecification(construct[A, C](configuration)(ProxySpecification.run(p2)).apply(fallback), identity)
+      ProxySpecification(Macros.nameOf[Hystrix.type] +: p2.metadata, construct[A, C](configuration)(ProxySpecification.run(p2)).apply(fallback), identity)
   }
 
   private def construct[A, B](configuration: HystrixConfiguration)(fn: A => B)(implicit executor: ExecutionContext): HystCommandNeedsFallback[A, B] =

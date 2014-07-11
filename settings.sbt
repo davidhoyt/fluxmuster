@@ -9,7 +9,7 @@ primarySettings in Global := primary(
 )
 
 compilerSettings in Global := compiling(
-    scalaVersion  = "2.11.1"
+    scalaVersion  = "2.10.4"
   , scalacOptions = Seq("-deprecation", "-unchecked", "-feature")
 )
 

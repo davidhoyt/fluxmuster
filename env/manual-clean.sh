@@ -14,6 +14,7 @@ cd ..
 echo "Manually cleaning this project..."
 
 echo "  Backing up designated directories..."
+mkdir -p $restore
 tar cf ".backup.tar" $restore
 
 echo "  Removing the following directories:"

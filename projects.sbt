@@ -7,6 +7,7 @@ lazy val _all = module("all")(
 )
 
 lazy val core = module("fluxmuster-core")("core")
+                  .dependsOn(macros % "compile")
 
 lazy val macros = module("fluxmuster-macros")("macros")
 

@@ -35,32 +35,28 @@ import Proxy._
 //}
 
 object Passthrough {
-  import scala.reflect.runtime.universe._
-  val NAME = typeOf[Passthrough.type].termSymbol.asTerm.fullName
+  val NAME = Macros.nameOf[Passthrough.type]
 
   def apply[A, B](name: String = NAME, onDownstream: A => Unit = {_: A => ()}, onUpstream: B => Unit = {_: B => ()}): ProxySpecification[A, A, B, B] =
     ProxySpecification(name)({ a => onDownstream(a); a}, {b => onUpstream(b); b})
 }
 
 object MapBidirectional {
-  import scala.reflect.runtime.universe._
-  val NAME = typeOf[MapBidirectional.type].termSymbol.asTerm.fullName
+  val NAME = Macros.nameOf[MapBidirectional.type]
 
   def apply[A, B, C, D](onDownstream: A => B)(onUpstream: C => D): ProxySpecification[A, B, C, D] =
     ProxySpecification(NAME)(onDownstream, onUpstream)
 }
 
 object MapDownstream {
-  import scala.reflect.runtime.universe._
-  val NAME = typeOf[MapDownstream.type].termSymbol.asTerm.fullName
+  val NAME = Macros.nameOf[MapDownstream.type]
 
   def apply[A, B, C](onDownstream: A => B): ProxySpecification[A, B, C, C] =
     ProxySpecification(NAME)(onDownstream, identity)
 }
 
 object MapUpstream {
-  import scala.reflect.runtime.universe._
-  val NAME = typeOf[MapUpstream.type].termSymbol.asTerm.fullName
+  val NAME = Macros.nameOf[MapUpstream.type]
 
   def apply[A, C, D](onUpstream: C => D): ProxySpecification[A, A, C, D] =
     ProxySpecification(NAME)(identity, onUpstream)
@@ -76,24 +72,36 @@ object Fooz {
 
   val hys = Proxy {
     implicit val hystrixConfiguration = HystrixConfiguration("MY-HYSTRIX-GROUP", "MY-HYSTRIX-COMMAND", 2.seconds)
-    val LogIt1 = Passthrough[String, Int]("LogIt1", { x => println(s"1: $x"); println(Thread.currentThread.getName)})
+    val LogIt1 = Passthrough[String, Int]("LogIt1", { x => ()})
     val LogIt2 = MapDownstream[String, Int, Int]({ x =>
-      println(s"2: $x");
-      println(Thread.currentThread.getName);
-      500
+      //println(s"2: $x");
+      //println(Thread.currentThread.getName);
+      x.toInt
     })
     val LogIt3 = MapDownstream[Int, Int, Int]({ x =>
-      println(s"3: $x");
-      println(Thread.currentThread.getName)
-      Thread.sleep(1 * 1000)
-      x + 3
+      println(Thread.currentThread.getName + s", 3: $x")
+      //Thread.sleep(1 * 1000)
+      x * 100
     })
     Hystrix(fallback = 100) |> LogIt1 <~> LogIt2 <~> LogIt3 <~> (x => x * 2) <~> (x => x + 1)
   }
   println(hys)
-  //val h1: ProxySpecification[String, String, String, String] =
-  println(Await.result(hys("MY VALUE"), 10.seconds))
-  println(Await.result(hys("MY VALUE 2"), 10.seconds))
+  for(i <- 0 until 200) {
+    hys(s"$i") map { x => println(s"$i: $x") }
+  }
+  Thread.sleep(10000)
+//  //val h1: ProxySpecification[String, String, String, String] =
+//  for (i <- Stream.from(0).take(1).par) {
+//    println(s"$i")
+//    try {
+//      hys.apply(s"VALUE $i")
+//    } catch {
+//      case t: Throwable => println(t)
+//    }
+//    //println(Await.result(hys(s"VALUE $i"), 10.seconds))
+//  }
+//  Thread.sleep(10000)
+//  //println(Await.result(hys("MY VALUE 2"), 10.seconds))
 
   val a1: LinkDownstream[String, Int] = _.toInt
   val a2: LinkDownstream[Int, Long] = _.toLong + 1

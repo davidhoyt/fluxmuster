@@ -20,12 +20,12 @@ object ProxySpecification {
   }
 
   def apply[A, B, C, D](downstream: LinkDownstream[A, B], upstream: LinkUpstream[C, D]): ProxySpecification[A, B, C, D] =
-    apply(immutable.Seq(s"<unknown>"), downstream, upstream)
+    apply(immutable.Seq(s"???"), downstream, upstream)
 
   def apply[A, B, C, D](metadata: Metadata)(downstream: LinkDownstream[A, B], upstream: LinkUpstream[C, D]): ProxySpecification[A, B, C, D] =
     apply(immutable.Seq(metadata), downstream, upstream)
 
-  private[fluxmuster] def apply[A, B, C, D](specMetadata: ConnectedMetadata, specDownstream: LinkDownstream[A, B], specUpstream: LinkUpstream[C, D]): ProxySpecification[A, B, C, D] =
+  def apply[A, B, C, D](specMetadata: ConnectedMetadata, specDownstream: LinkDownstream[A, B], specUpstream: LinkUpstream[C, D]): ProxySpecification[A, B, C, D] =
     new ProxySpecification[A, B, C, D] {
       val metadata   = specMetadata
       val downstream = specDownstream
@@ -72,7 +72,7 @@ object ProxySpecification {
     def <~>[C, F](link: LinkDownstream[B, C]): ProxySpecification[A, C, G, E] =
       connect(link)
     def connect[C, F](link: LinkDownstream[B, C]): ProxySpecification[A, C, G, E] = {
-      val spec = ProxySpecification(link, identity[G])
+      val spec = ProxySpecification(immutable.Seq(link.toString()), link, identity[G])
       val combined = combine(p1, spec)
       combined
     }
