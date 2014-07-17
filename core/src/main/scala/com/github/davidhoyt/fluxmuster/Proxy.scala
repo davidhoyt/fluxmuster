@@ -6,6 +6,7 @@ trait Proxy[-TAcceptDownstream, +TMappedDownstream, -TAcceptUpstream, +TMappedUp
 extends ProxySpecification[TAcceptDownstream, TMappedDownstream, TAcceptUpstream, TMappedUpstream] {
   lazy val downstream = specification.downstream
   lazy val upstream = specification.upstream
+  lazy val connections = specification.connections
 
   override def toString =
     s"Proxy(${metadata.mkString(" <~> ")})"

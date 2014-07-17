@@ -19,8 +19,11 @@ object Hystrix {
                     (implicit configuration: HystrixConfiguration, executor: ExecutionContext): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] = {
     require(configuration.timeout.isFinite(), s"Hystrix timeout must be a finite amount")
 
-    (p2: ProxySpecification[A, B, B, C]) =>
-      ProxySpecification(Macros.nameOf[Hystrix.type] +: p2.metadata, construct[A, C](configuration)(ProxySpecification.run(p2)).apply(fallback), identity)
+    (p2: ProxySpecification[A, B, B, C]) => {
+      val downstream = construct[A, C](configuration)(ProxySpecification.run(p2)).apply(fallback)
+      val upstream = identity[Future[C]]_
+      ProxySpecification(Macros.nameOf[Hystrix.type] +: p2.metadata, downstream, upstream, p2.connections)
+    }
   }
 
   private def construct[A, B](configuration: HystrixConfiguration)(fn: A => B)(implicit executor: ExecutionContext): HystCommandNeedsFallback[A, B] =

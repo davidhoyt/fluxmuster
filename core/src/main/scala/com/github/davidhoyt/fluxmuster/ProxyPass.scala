@@ -4,6 +4,11 @@ sealed trait ProxyPass[+A] {
   val ignore: Boolean
   val continue: Boolean = !ignore
   val value: A
+  def flatten: A = value
+
+  def mapPF[B](fn: PartialFunction[A, B]): ProxyPass[B] =
+    map(fn.apply)
+
   def map[B](fn: A => B): ProxyPass[B] =
     if (ignore)
       ShortCircuit(fn(value))
@@ -18,6 +23,9 @@ object ProxyPass {
       case ShortCircuit(value) => Some(value.asInstanceOf[A])
       case _ => None
     }
+
+  def flatten[A](proxyPass: ProxyPass[A]): A =
+    proxyPass.flatten
 }
 
 //Meant to tell downstream portions of the pipeline that they should not modify a value except

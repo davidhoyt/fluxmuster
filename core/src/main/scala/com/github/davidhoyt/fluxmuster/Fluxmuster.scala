@@ -2,6 +2,11 @@ package foo
 
 //Fluxmuster
 
+//TODO: Option to Akka-ize a proxy (convert each part to an actor)
+
+import akka.actor.ActorSystem
+import akka.util.Timeout
+
 import scala.collection._
 import scala.util._
 import com.github.davidhoyt.fluxmuster._
@@ -34,34 +39,6 @@ import Proxy._
 //    ProxySpecification("Cache")(Fooz.ps2.downstream, Fooz.ps2.upstream)
 //}
 
-object Passthrough {
-  val NAME = Macros.nameOf[Passthrough.type]
-
-  def apply[A, B](name: String = NAME, onDownstream: A => Unit = {_: A => ()}, onUpstream: B => Unit = {_: B => ()}): ProxySpecification[A, A, B, B] =
-    ProxySpecification(name)({ a => onDownstream(a); a}, {b => onUpstream(b); b})
-}
-
-object MapBidirectional {
-  val NAME = Macros.nameOf[MapBidirectional.type]
-
-  def apply[A, B, C, D](onDownstream: A => B)(onUpstream: C => D): ProxySpecification[A, B, C, D] =
-    ProxySpecification(NAME)(onDownstream, onUpstream)
-}
-
-object MapDownstream {
-  val NAME = Macros.nameOf[MapDownstream.type]
-
-  def apply[A, B, C](onDownstream: A => B): ProxySpecification[A, B, C, C] =
-    ProxySpecification(NAME)(onDownstream, identity)
-}
-
-object MapUpstream {
-  val NAME = Macros.nameOf[MapUpstream.type]
-
-  def apply[A, C, D](onUpstream: C => D): ProxySpecification[A, A, C, D] =
-    ProxySpecification(NAME)(identity, onUpstream)
-}
-
 
 object Fooz {
 
@@ -69,27 +46,43 @@ object Fooz {
   import scala.concurrent.duration._
   import scala.concurrent.ExecutionContext.Implicits.global
 
+  implicit val timeout = Timeout(10.seconds)
+  implicit val system = ActorSystem("test")
 
   val hys = Proxy {
+    implicit val inMemory = InMemoryCache()
     implicit val hystrixConfiguration = HystrixConfiguration("MY-HYSTRIX-GROUP", "MY-HYSTRIX-COMMAND", 2.seconds)
-    val LogIt1 = Passthrough[String, Int]("LogIt1", { x => ()})
-    val LogIt2 = MapDownstream[String, Int, Int]({ x =>
+
+    val LogIt1 = SideEffecting[String, Long]("LogIt1", { x: String => ()})
+    val LogIt2 = Downstream[String, Int, Long]({ x: String =>
       //println(s"2: $x");
       //println(Thread.currentThread.getName);
       x.toInt
     })
-    val LogIt3 = MapDownstream[Int, Int, Int]({ x =>
-      println(Thread.currentThread.getName + s", 3: $x")
+    val LogIt3 = Downstream[Int, Int, Long]({ x: Int =>
+      //println(Thread.currentThread.getName + s", 3: $x")
       //Thread.sleep(1 * 1000)
-      x * 100
+      x * 1
     })
-    Hystrix(fallback = 100) |> LogIt1 <~> LogIt2 <~> LogIt3 <~> (x => x * 2) <~> (x => x + 1)
+
+    //val z = Projection.upstream[Int, Int, Int] <~> Cache[Int, Int](inMemory) <~> KeyValueProcessor[Int, Int, Int] { k => println(s"IN KVProcessor: $k"); k + 1 }
+    val o = Identity[Int, String] <~> ((x: Int) => x + 0, (y: Long) => y.toString) <~> Identity[Int, Long] <~> Projection.upstreamTuple2[Int, Int, Long] <~> Cache[Int, Long](inMemory) <~> KeyValueProcessor[Int, Int, Long] { k => println(s"IN KVProcessor: $k"); k + 1L }
+    val fa: ProxySpecification[String, Future[Long], Future[Long], Future[Long]] =
+      Akka(AkkaConfiguration()) |> (LogIt1 <~> LogIt2 <~> LogIt3 <~> ((x: Int) => x + 0, (y: Long) => y) <~> Projection.upstreamTuple2[Int, Int, Long] <~> Cache[Int, Long](inMemory) <~> KeyValueProcessor[Int, Int, Long] { k => println(s"IN KVProcessor: $k"); k + 1L })
+    val fb: ProxySpecification[String, Future[Future[Long]], Future[Future[Long]], Future[Future[Long]]] = (Hystrix(fallback = Future.successful(100L)) |> fa)
+    val f: ProxySpecification[String, Future[Future[Long]], Future[Future[Long]], Future[Long]] = Flatten("") <~> fb
+    f
   }
   println(hys)
-  for(i <- 0 until 200) {
-    hys(s"$i") map { x => println(s"$i: $x") }
+  println(hys.connections)
+  println(Ehcache.availableCaches)
+  for(i <- 0 until 1000) {
+    hys(s"${i % 250}") map { x => println(s"$i: $x") }
+    //if (i % 50 == 0)
+    //  Thread.sleep(1)
   }
   Thread.sleep(10000)
+  system.shutdown()
 //  //val h1: ProxySpecification[String, String, String, String] =
 //  for (i <- Stream.from(0).take(1).par) {
 //    println(s"$i")
