@@ -1,11 +1,12 @@
 package com.github.davidhoyt.fluxmuster
 
+import com.netflix.hystrix.HystrixCommand
 import scala.concurrent.duration._
 
-case class HystrixConfiguration(group: String, command: String, timeout: Duration = 1.second)
+case class HystrixConfiguration(group: String, command: String, timeout: Duration = 1.second, builder: HystrixCommand.Setter => HystrixCommand.Setter = identity)
 
 object Hystrix {
-  import com.netflix.hystrix.{HystrixCommand, HystrixCommandGroupKey, HystrixCommandKey, HystrixCommandProperties}
+  import com.netflix.hystrix.{HystrixCommandGroupKey, HystrixCommandKey, HystrixCommandProperties}
   import rx.{Subscription, Subscriber}
   import scala.concurrent.ExecutionContext
   import scala.concurrent.{Promise, Future, future}
@@ -27,44 +28,53 @@ object Hystrix {
   }
 
   private def construct[A, B](configuration: HystrixConfiguration)(fn: A => B)(implicit executor: ExecutionContext): HystCommandNeedsFallback[A, B] =
-    (fallback: B) => (param: A) => {
-      lazy val fallbackTo = fallback
+    (fallback: B) => {
+      //Place this outside the returned function in order to ensure
+      //it's evaluated only once across multiple invocations of the returned
+      //function.
+      lazy val fallbackTo =
+        fallback
+
       lazy val setter =
-        HystrixCommand.Setter
-          .withGroupKey(HystrixCommandGroupKey.Factory.asKey(configuration.group))
-          .andCommandKey(HystrixCommandKey.Factory.asKey(configuration.command))
-          .andCommandPropertiesDefaults(
-            HystrixCommandProperties.Setter()
-              .withExecutionIsolationThreadTimeoutInMilliseconds(configuration.timeout.toMillis.toInt)
-          )
+        configuration.builder(
+          HystrixCommand.Setter
+            .withGroupKey(HystrixCommandGroupKey.Factory.asKey(configuration.group))
+            .andCommandKey(HystrixCommandKey.Factory.asKey(configuration.command))
+            .andCommandPropertiesDefaults(
+              HystrixCommandProperties.Setter()
+                .withExecutionIsolationThreadTimeoutInMilliseconds(configuration.timeout.toMillis.toInt)
+            )
+        )
 
-      val cmd = new HystrixCommand[B](setter) {
-        override def run() =
-          fn(param)
+      (param: A) => {
+        val cmd = new HystrixCommand[B](setter) {
+          override def run() =
+            fn(param)
 
-        override def getFallback =
-          fallback
+          override def getFallback =
+            fallback
+        }
+
+        val p = Promise[B]()
+
+        //Avoiding conversion to rx.scala.Observable since there's no need to do
+        //the implicit conversion.
+        val o = cmd.observe()
+
+        val subscription: Subscription = o.subscribe(new Subscriber[B]() {
+          override def onNext(result: B): Unit =
+            p.success(result)
+
+          override def onError(t: Throwable): Unit =
+            p.failure(t)
+
+          override def onCompleted(): Unit =
+            ()
+        })
+
+        val future = p.future
+        future.onComplete(_ => subscription.unsubscribe())
+        future
       }
-
-      val p = Promise[B]()
-
-      //Avoiding conversion to rx.scala.Observable since there's no need to do
-      //the implicit conversion.
-      val o = cmd.observe()
-
-      val subscription: Subscription = o.subscribe(new Subscriber[B]() {
-        override def onNext(result: B): Unit =
-          p.success(result)
-
-        override def onError(t: Throwable): Unit =
-          p.failure(t)
-
-        override def onCompleted(): Unit =
-          ()
-      })
-
-      val future = p.future
-      future.onComplete(_ => subscription.unsubscribe())
-      future
     }
 }

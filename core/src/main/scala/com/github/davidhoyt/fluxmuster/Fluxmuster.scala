@@ -53,6 +53,8 @@ object Fooz {
     implicit val inMemory = InMemoryCache()
     implicit val hystrixConfiguration = HystrixConfiguration("MY-HYSTRIX-GROUP", "MY-HYSTRIX-COMMAND", 2.seconds)
 
+    val b = Identity[String, Int]("Identity(FIRST)") <~> ((x: String) => x.toLong) <~> Identity[Long, Int]("Identity(SECOND)") <~> (((x: Long) => x, (x: Long) => x.toInt))
+
     val LogIt1 = SideEffecting[String, Long]("LogIt1", { x: String => ()})
     val LogIt2 = Downstream[String, Int, Long]({ x: String =>
       //println(s"2: $x");

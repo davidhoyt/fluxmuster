@@ -15,12 +15,20 @@ object Akka {
   def apply[A, B, C](implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] =
     apply(AkkaConfiguration())
 
-  def apply[A, B, C](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] =
+  def apply[A, B, C](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tA: TypeData[A], tB: TypeData[B], tC: TypeData[C]): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] =
     (p2: ProxySpecification[A, B, B, C]) => {
       val downstream = run(p2, configuration, timeout, executionContext, actorRefFactory)_
       val upstream = identity[Future[C]]_
-      ProxySpecification(Macros.nameOf[Akka.type] +: p2.metadata, downstream, upstream, p2.connections)
+      ProxySpecification(Metadata(Macros.nameOf[Akka.type], tA, tB, tB, tC) +: p2.metadata, downstream, upstream, p2.connections)
     }
+
+  def par[A, B, C](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tA: TypeData[A], tB: TypeData[B], tC: TypeData[C]): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] = {
+    (p2: ProxySpecification[A, B, B, C]) => {
+      val downstream = runParallel(p2, configuration, timeout, executionContext, actorRefFactory)_
+      val upstream = identity[Future[C]]_
+      ProxySpecification(Metadata(Macros.nameOf[Akka.type], tA, tB, tB, tC) +: p2.metadata, downstream, upstream, p2.connections)
+    }
+  }
 
   private def run[A, B, C](specification: ProxySpecification[A, B, B, C], configuration: AkkaConfiguration, timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory)(a: A): Future[C] = {
     import akka.pattern.ask
@@ -56,4 +64,9 @@ object Akka {
         sender() ! Response(Try(ProxySpecification.run(spec)(v)))
     }
   }
+
+  private def runParallel[A, B, C](specification: ProxySpecification[A, B, B, C], configuration: AkkaConfiguration, timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory)(a: A): Future[C] = {
+    ???
+  }
+  class Proxy
 }

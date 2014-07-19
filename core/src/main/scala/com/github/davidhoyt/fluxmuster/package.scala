@@ -3,7 +3,7 @@ package com.github.davidhoyt
 import scala.collection._
 
 package object fluxmuster {
-  type Metadata = String
+  //type Meta = Metadata
   type Error = Throwable
 
   type ErrorProcessor = Error => Unit

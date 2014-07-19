@@ -86,11 +86,18 @@ object Cache {
 }
 
 object KeyValueProcessor {
+  import scala.collection._
+
   type Downstream[A, K, V] = ProxyPass[(A, K, Option[V])]
   type Upstream[A, K, V] = ProxyPass[(A, K, V)]
 
+  val NAME = Macros.nameOf[KeyValueProcessor.type]
+
   def apply[A, K, V](processor: K => V): ProxySpecification[Downstream[A, K, V], Upstream[A, K, V], Upstream[A, K, V], Upstream[A, K, V]] =
-    ProxySpecification(Macros.nameOf[KeyValueProcessor.type])(process(processor), identity)
+    apply(NAME)(processor)
+
+  def apply[A : TypeData, K : TypeData, V : TypeData](name: String)(processor: K => V): ProxySpecification[Downstream[A, K, V], Upstream[A, K, V], Upstream[A, K, V], Upstream[A, K, V]] =
+    ProxySpecification(Metadata(name, TypeData[Downstream], TypeData[Upstream], TypeData[Upstream], TypeData[Upstream], additionalTypes = immutable.Seq(implicitly[TypeData[A]], implicitly[TypeData[K]], implicitly[TypeData[V]])))(process(processor), identity)
 
   private def process[A, K, V](processor: K => V)(pass: Downstream[A, K, V]): Upstream[A, K, V] =
     pass mapPF {

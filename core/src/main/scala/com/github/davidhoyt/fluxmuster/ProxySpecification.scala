@@ -35,12 +35,10 @@ object ProxySpecification {
       val downstream = specDownstream
       val upstream   = specUpstream
       val connections = {
-        val myself = immutable.Seq[ProxySpecification[_, _, _, _]](this)
-        myself ++ specConnections
-//        if (specConnections.nonEmpty)
-//          myself :+ specConnections.head
-//        else
-//          myself
+        if (specConnections.nonEmpty)
+          specConnections
+        else
+          immutable.Seq[ProxySpecification[_, _, _, _]](this)
       }
     }
   }
@@ -66,8 +64,10 @@ object ProxySpecification {
     val upstream: LinkUpstream[F, E] = upstream1 compose upstream2
     val connections: immutable.Seq[ProxySpecification[_, _, _, _]] =
       (connections1 ++ connections2).foldLeft(immutable.Seq[ProxySpecification[_, _, _, _]]()) {
-        case (seq, ProxySpecification(_, _, _, head +: _)) => seq :+ head
-        case (seq, _) => seq
+        case (seq, ProxySpecification(_, _, _, Seq(conn))) =>
+          seq :+ conn
+        case (seq, _) =>
+          seq
       }
     ProxySpecification(metadata1 ++ metadata2, downstream, upstream, connections)
   }
