@@ -17,13 +17,13 @@ object Hystrix {
   type HystCommand[-A, +B] = A => Future[B]
 
   def apply[A, B, C](fallback: => C = throw new UnsupportedOperationException("No fallback available"))
-                    (implicit configuration: HystrixConfiguration, executor: ExecutionContext): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] = {
+                    (implicit configuration: HystrixConfiguration, executor: ExecutionContext, tA: TypeData[A], tC: TypeData[Future[C]]): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] = {
     require(configuration.timeout.isFinite(), s"Hystrix timeout must be a finite amount")
 
     (p2: ProxySpecification[A, B, B, C]) => {
       val downstream = construct[A, C](configuration)(ProxySpecification.run(p2)).apply(fallback)
       val upstream = identity[Future[C]]_
-      ProxySpecification(Macros.nameOf[Hystrix.type] +: p2.metadata, downstream, upstream, p2.connections)
+      ProxySpecification(Metadata(Macros.nameOf[Hystrix.type], tA, tC, tC, tC) +: p2.metadata, downstream, upstream, p2.connections)
     }
   }
 

@@ -3,9 +3,9 @@ package com.github.davidhoyt.fluxmuster
 object BiDirectional {
   val NAME = Macros.nameOf[BiDirectional.type]
 
-  def apply[A, B, C, D](onDownstream: LinkDownstream[A, B])(onUpstream: LinkUpstream[C, D]): ProxySpecification[A, B, C, D] =
-    apply(NAME)(onDownstream)(onUpstream)
+  def apply[A, B, C, D](onDownstream: LinkDownstream[A, B])(onUpstream: LinkUpstream[C, D])(implicit tA: TypeData[A], tB: TypeData[B], tC: TypeData[C], tD: TypeData[D]): ProxySpecification[A, B, C, D] =
+    apply(NAME)(onDownstream)(onUpstream)(tA, tB, tC, tD)
 
-  def apply[A : TypeData, B : TypeData, C : TypeData, D : TypeData](name: String)(onDownstream: LinkDownstream[A, B])(onUpstream: LinkUpstream[C, D]): ProxySpecification[A, B, C, D] =
-    ProxySpecification(Metadata(name, implicitly[TypeData[A]], implicitly[TypeData[B]], implicitly[TypeData[C]], implicitly[TypeData[D]]))(onDownstream, onUpstream)
+  def apply[A, B, C, D](name: String)(onDownstream: LinkDownstream[A, B])(onUpstream: LinkUpstream[C, D])(implicit tA: TypeData[A], tB: TypeData[B], tC: TypeData[C], tD: TypeData[D]): ProxySpecification[A, B, C, D] =
+    ProxySpecification(Metadata(name, tA, tB, tC, tD))(onDownstream, onUpstream)
 }

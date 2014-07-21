@@ -20,8 +20,8 @@ object ProxySpecification {
     tag.tpe.termSymbol.name.decoded
   }
 
-  def apply[A, B, C, D](downstream: LinkDownstream[A, B], upstream: LinkUpstream[C, D]): ProxySpecification[A, B, C, D] =
-    apply(immutable.Seq(s"???"), downstream, upstream)
+  def apply[A : TypeData, B : TypeData, C : TypeData, D : TypeData](downstream: LinkDownstream[A, B], upstream: LinkUpstream[C, D]): ProxySpecification[A, B, C, D] =
+    apply(immutable.Seq(Metadata(s"<unknown>", implicitly[TypeData[A]], implicitly[TypeData[B]], implicitly[TypeData[C]], implicitly[TypeData[D]])), downstream, upstream)
 
   def apply[A, B, C, D](metadata: Metadata)(downstream: LinkDownstream[A, B], upstream: LinkUpstream[C, D]): ProxySpecification[A, B, C, D] =
     apply(immutable.Seq(metadata), downstream, upstream)
@@ -78,8 +78,8 @@ object ProxySpecification {
     result
   }
 
-  implicit def function2ProxySpecification[A, B, C, D](fn: A => B): ProxySpecification[A, B, B, B] =
-    ProxySpecification(fn, identity)
+  implicit def functionToProxySpecification[A, B, C, D](fn: A => B)(implicit tA: TypeData[A], tB: TypeData[B]): ProxySpecification[A, B, B, B] =
+    ProxySpecification(immutable.Seq(Metadata(fn.toString(), tA, tB, tB, tB)), fn, identity)
 
   implicit class ProxySpecificationEnhancements[A, B, G, E](val p1: ProxySpecification[A, B, G, E]) extends AnyVal {
     def <~>[C, F](p2: ProxySpecification[B, C, F, G]): ProxySpecification[A, C, F, E] =
@@ -87,10 +87,10 @@ object ProxySpecification {
     def connect[C, F](p2: ProxySpecification[B, C, F, G]): ProxySpecification[A, C, F, E] =
       combine(p1, p2)
 
-    def <~>[C, F](link: LinkDownstream[B, C]): ProxySpecification[A, C, G, E] =
-      connect(link)
-    def connect[C, F](link: LinkDownstream[B, C]): ProxySpecification[A, C, G, E] = {
-      val spec = ProxySpecification(immutable.Seq(link.toString()), link, identity[G])
+    def <~>[C, F](link: LinkDownstream[B, C])(implicit tA: TypeData[A], tC: TypeData[C], tG: TypeData[G], tE: TypeData[E]): ProxySpecification[A, C, G, E] =
+      connect(link)(tA, tC, tG, tE)
+    def connect[C, F](link: LinkDownstream[B, C])(implicit tA: TypeData[A], tC: TypeData[C], tG: TypeData[G], tE: TypeData[E]): ProxySpecification[A, C, G, E] = {
+      val spec = ProxySpecification(immutable.Seq(Metadata(link.toString(), tA, tC, tG, tE)), link, identity[G])
       val combined = combine(p1, spec)
       combined
     }

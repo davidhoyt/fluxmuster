@@ -51,15 +51,15 @@ object Cache {
 
   //Provide a way to convey cache eviction, replace, etc.?
 
-  def apply[K, V](implicit ops: CacheOps): Specification[K, K, V] =
-    new CacheSpecification[K, K, V](identity, ops)
+  def apply[K, V](implicit ops: CacheOps, tA: TypeData[K], tB: TypeData[Downstream[K, K, V]], tC: TypeData[Upstream[K, K, V]], tD: TypeData[(K, V)]): Specification[K, K, V] =
+    new CacheSpecification[K, K, V](identity, ops, tA, tB, tC, tD)
 
   @scala.annotation.implicitNotFound("Please specify a cache typeclass to use.")
-  def apply[A, K, V](keyExtractor: KeyExtractor[A, K])(implicit ops: CacheOps): Specification[A, K, V] =
-    new CacheSpecification[A, K, V](keyExtractor, ops)
+  def apply[A, K, V](keyExtractor: KeyExtractor[A, K])(implicit ops: CacheOps, tA: TypeData[A], tB: TypeData[Downstream[A, K, V]], tC: TypeData[Upstream[A, K, V]], tD: TypeData[(A, V)]): Specification[A, K, V] =
+    new CacheSpecification[A, K, V](keyExtractor, ops, tA, tB, tC, tD)
 
-  private class CacheSpecification[A, K, V](keyExtractor: KeyExtractor[A, K], ops: CacheOps) extends Specification[A, K, V] {
-    val metadata = immutable.Seq(Macros.nameOf[Cache.type])
+  private class CacheSpecification[A, K, V](keyExtractor: KeyExtractor[A, K], ops: CacheOps, tA: TypeData[A], tB: TypeData[Downstream[A, K, V]], tC: TypeData[Upstream[A, K, V]], tD: TypeData[(A, V)]) extends Specification[A, K, V] {
+    val metadata = immutable.Seq(Metadata(Macros.nameOf[Cache.type], tA, tB, tC, tD))
     val downstream: LinkDownstream[A, Downstream[A, K, V]] = lookup
     val upstream: LinkUpstream[Upstream[A, K, V], (A, V)] = store
     val connections = immutable.Seq(this)
@@ -93,11 +93,11 @@ object KeyValueProcessor {
 
   val NAME = Macros.nameOf[KeyValueProcessor.type]
 
-  def apply[A, K, V](processor: K => V): ProxySpecification[Downstream[A, K, V], Upstream[A, K, V], Upstream[A, K, V], Upstream[A, K, V]] =
-    apply(NAME)(processor)
+  def apply[A, K, V](processor: K => V)(implicit tA: TypeData[Downstream[A, K, V]], tB: TypeData[Upstream[A, K, V]]): ProxySpecification[Downstream[A, K, V], Upstream[A, K, V], Upstream[A, K, V], Upstream[A, K, V]] =
+    apply(NAME)(processor)(tA, tB)
 
-  def apply[A : TypeData, K : TypeData, V : TypeData](name: String)(processor: K => V): ProxySpecification[Downstream[A, K, V], Upstream[A, K, V], Upstream[A, K, V], Upstream[A, K, V]] =
-    ProxySpecification(Metadata(name, TypeData[Downstream], TypeData[Upstream], TypeData[Upstream], TypeData[Upstream], additionalTypes = immutable.Seq(implicitly[TypeData[A]], implicitly[TypeData[K]], implicitly[TypeData[V]])))(process(processor), identity)
+  def apply[A, K, V](name: String)(processor: K => V)(implicit tA: TypeData[Downstream[A, K, V]], tB: TypeData[Upstream[A, K, V]]): ProxySpecification[Downstream[A, K, V], Upstream[A, K, V], Upstream[A, K, V], Upstream[A, K, V]] =
+    ProxySpecification(Metadata(name, tA, tB, tB, tB))(process(processor), identity)
 
   private def process[A, K, V](processor: K => V)(pass: Downstream[A, K, V]): Upstream[A, K, V] =
     pass mapPF {
@@ -112,8 +112,14 @@ object KeyValueProcessor {
 
 object Projection {
   import KeyValueProcessor._
-  def upstreamTuple2[X, A, V]: ProxySpecification[X, X, (A, V), V] =
-    ProxySpecification(Macros.nameOf[Projection.type])(identity, projectTuple2)
+
+  val NAME = Macros.nameOf[Projection.type]
+
+  def upstreamTuple2[X, A, V](implicit tA: TypeData[X], tC: TypeData[(A, V)], tD: TypeData[V]): ProxySpecification[X, X, (A, V), V] =
+    upstreamTuple2(NAME)(tA, tC, tD)
+
+  def upstreamTuple2[X, A, V](name: String)(implicit tA: TypeData[X], tC: TypeData[(A, V)], tD: TypeData[V]): ProxySpecification[X, X, (A, V), V] =
+    ProxySpecification(Metadata(name, tA, tA, tC, tD))(identity, projectTuple2)
 
   def projectTuple2[A, V](in: (A, V)): V = {
     val (_, value) = in

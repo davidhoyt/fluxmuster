@@ -1,5 +1,39 @@
 package com.github.davidhoyt.fluxmuster
 
+import scala.reflect.runtime.universe._
+
+sealed case class TypeDataTree[T](typeParameters: Vector[TypeDataTree[_]])(implicit tag: TypeTag[T]) {
+  val tpe = tag.tpe
+  val symbol = tpe.typeSymbol
+
+  private[this] lazy val asShortString = {
+    val (typeName, typeParamsStart, typeParams, typeParamsEnd) =
+      if (typeParameters.isEmpty)
+        (symbol.name.decoded, "", "", "")
+      else if (tpe <:< typeOf[Product])
+        ("", "(", typeParametersAsShortString, ")")
+      else
+        (symbol.name.decoded, "[", typeParametersAsShortString, "]")
+    s"$typeName$typeParamsStart$typeParams$typeParamsEnd"
+  }
+
+  lazy val typeParametersAsShortString = {
+    val sb = StringBuilder.newBuilder
+    for ((typeParam, idx) <- typeParameters.zipWithIndex) {
+      if (idx > 0)
+        sb ++= ", "
+      sb ++= typeParam.toString
+    }
+    sb.toString()
+  }
+
+  def toShortString: String =
+    asShortString
+
+  override def toString: String =
+    asShortString
+}
+
 sealed trait RuntimeMirror {
   import scala.reflect.runtime.universe._
 
@@ -15,12 +49,18 @@ sealed case class TypePosition(enclosingClassFullName: Option[String], source: S
     enclosingClassSymbol map (_.toType)
 }
 
-sealed case class TypeData[T](fullName: String, position: TypePosition) extends RuntimeMirror {
-  val symbol =
-    mirror.staticClass(fullName).asType
-
+sealed case class TypeData[T](tree: TypeDataTree[T], position: TypePosition) extends RuntimeMirror {
   val tpe =
-    symbol.toType
+    tree.tpe
+
+  val symbol =
+    tree.symbol
+
+  def toShortString: String =
+    s"TypeData(${tree.toShortString}, $position)"
+
+  override def toString: String =
+    s"TypeData(${tree.toString}, $position)"
 }
 
 object TypeData {
@@ -40,7 +80,95 @@ object TypeData {
       val symbol = t.typeSymbol.asType
       val pos = c.enclosingPosition
 
-      val name = c.literal(symbol.fullName)
+      /**
+       * Takes a string like "foo.bar.qux" and converts it to:
+       *   `Select(Select(Ident(newTermName("foo")), newTermName("bar")), newTermName("qux"))`
+       */
+      def selectWith(name: String): c.Tree = {
+        def recurse(curr: c.Tree, remaining: List[String]): c.Tree = remaining match {
+          case head :: tail if tail.nonEmpty =>
+            Select(recurse(curr, tail), newTermName(head))
+          case head :: _ =>
+            Ident(newTermName(head))
+        }
+        val split = name.split('.').toList.reverse
+        recurse(EmptyTree, split)
+      }
+
+      /*
+        Select(
+          Select(
+            Select(
+              Select(
+                Select(
+                  Ident(newTermName("com")
+                ),
+                newTermName("github")
+              ),
+              newTermName("davidhoyt")
+            ),
+            newTermName("fluxmuster")
+          ),
+          newTermName("TypeDataTree")
+        )
+       */
+      val selectTypeDataTree =
+        selectWith(typeOf[TypeDataTree[_]].typeSymbol.fullName)
+
+      /*
+        Select(
+          Select(
+            Ident(newTermName("scala")
+          ),
+          newTermName("Vector")
+        )
+       */
+      val selectVector =
+        selectWith("scala.Vector")
+
+      /**
+       * Generates an AST representing the following:
+       *   `TypeDataTree[T](Vector(typeParameters))`
+       * `T` is the provided type and its implicit type tag is automagically
+       * found and created by the compiler.
+       *
+       * Reify is not eligible because in 2.10 we're unable to splice a List
+       */
+      def typeDataTree(value: c.Type)(typeParameters: List[c.Tree]): c.Tree = {
+        Apply(
+          TypeApply(
+            selectTypeDataTree,
+            List(
+              TypeTree(value)
+            )
+          ),
+          List(
+            //children
+            Apply(
+              Select(
+                selectVector,
+                newTermName("apply")
+              ),
+              typeParameters
+            )
+          )
+        )
+      }
+
+      def toRuntimeUniverse(tpe: c.Type): c.Tree =
+        c.reifyType(treeBuild.mkRuntimeUniverseRef, EmptyTree, tpe)
+
+      def tryIt(tpe: c.Type): c.Tree = {
+        val normalized = tpe.normalize
+        normalized match {
+          case TypeRef(_, sym, args) =>
+            typeDataTree(normalized)(args.map(x => tryIt(x)))
+          case _ =>
+            EmptyTree
+        }
+      }
+
+      val tree = c.Expr[TypeDataTree[T]](tryIt(t))
       val file = c.literal(pos.source.toString())
       val line = c.literal(pos.line)
       val column = c.literal(pos.column)
@@ -52,7 +180,7 @@ object TypeData {
           c.literal(c.enclosingClass.symbol.fullName)
 
       reify {
-        TypeData[T](name.splice, TypePosition(Option(enclosingClassFullName.splice), file.splice, line.splice, column.splice, index.splice))
+        TypeData[T](tree.splice, TypePosition(Option(enclosingClassFullName.splice), file.splice, line.splice, column.splice, index.splice))
       }
     }
   }

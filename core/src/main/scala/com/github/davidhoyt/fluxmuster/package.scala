@@ -1,5 +1,7 @@
 package com.github.davidhoyt
 
+import com.github.davidhoyt.fluxmuster.ProxySpecification.ProxySpecificationEnhancements
+
 import scala.collection._
 
 package object fluxmuster {
@@ -48,26 +50,43 @@ package object fluxmuster {
       proxy(p2)
   }
 
-  implicit def functionToDownstreamProxySpecification[A, B, C](fn: A => B): ProxySpecification[A, B, C, C] =
-    ProxySpecification("<function>")(fn, identity)
+  implicit def functionToDownstreamProxySpecification[A, B, C](fn: A => B)(implicit tA: TypeData[A], tB: TypeData[B], tC: TypeData[C]): ProxySpecification[A, B, C, C] =
+    ProxySpecification(Metadata("<function>", tA, tB, tC, tC))(fn, identity)
 
-  implicit class Function1Enhancements[-A, +B](val fn: A => B) extends AnyVal {
-    def <~>[C, D, E](p2: ProxySpecification[B, C, D, E]): ProxySpecification[A, C, D, E] =
-      connect(p2)
+  implicit class Function1Enhancements[A, B](val fn: A => B) extends AnyVal {
+    def <~>[C, D, E](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeData[A], tB: TypeData[B], tC: TypeData[C], tD: TypeData[D], tE: TypeData[E]): ProxySpecification[A, C, D, E] =
+      connect(p2)(tA, tB, tC, tD, tE)
 
-    def connect[C, D, E](p2: ProxySpecification[B, C, D, E]): ProxySpecification[A, C, D, E] =
-      functionToDownstreamProxySpecification(fn) <~> p2
+    //TODO: FIX!!
+    def connect[C, D, E](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeData[A], tB: TypeData[B], tC: TypeData[C], tD: TypeData[D], tE: TypeData[E]): ProxySpecification[A, C, D, E] = {
+//      val f: ProxySpecification[A, B, D, D] = functionToDownstreamProxySpecification(fn)(tA, tB, tD)
+//      val f2 = new ProxySpecificationEnhancements[A, B, D, D](f).connect(p2)
+//      f2
+      ???
+    }
   }
 
-  implicit def tuple2Function1ToProxySpecification[A, B, C, D](t: (A => B, C => D)): ProxySpecification[A, B, C, D] =
-    FnTuple2(t)
+  implicit def tuple2Function1ToProxySpecification[A, B, C, D](t: (A => B, C => D))(implicit tA: TypeData[A], tB: TypeData[B], tC: TypeData[C], tD: TypeData[D]): ProxySpecification[A, B, C, D] =
+    FnTuple2(t)(tA, tB, tC, tD)
 
-  implicit class Tuple2Function1Enhancements[-A, +B, -E, +F](val t: (A => B, E => F)) extends AnyVal {
-    def <~>[C, D](p2: ProxySpecification[B, C, D, E]): ProxySpecification[A, C, D, F] =
-      connect(p2)
+  implicit class Tuple2Function1Enhancements[A, B, E, F](val t: (A => B, E => F)) extends AnyVal {
+    def <~>[C, D](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeData[A], tB: TypeData[B], tE: TypeData[E], tF: TypeData[F]): ProxySpecification[A, C, D, F] =
+      connect(p2)(tA, tB, tE, tF)
 
-    def connect[C, D](p2: ProxySpecification[B, C, D, E]): ProxySpecification[A, C, D, F] =
-      FnTuple2(t) <~> p2
+    def connect[C, D](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeData[A], tB: TypeData[B], tE: TypeData[E], tF: TypeData[F]): ProxySpecification[A, C, D, F] =
+      FnTuple2(t)(tA, tB, tE, tF) <~> p2
+  }
+
+  implicit class ConnectedMetadataEnhancements(val connectedMetadata: ConnectedMetadata) extends AnyVal {
+    def toShortString = {
+      val sb = StringBuilder.newBuilder
+      for ((meta, idx) <- connectedMetadata.zipWithIndex) {
+        if (idx > 0)
+          sb ++= ", "
+        sb ++= meta.toShortString
+      }
+      sb.toString()
+    }
   }
 
   trait Logger {
