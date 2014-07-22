@@ -17,7 +17,7 @@ object Hystrix {
   type HystCommand[-A, +B] = A => Future[B]
 
   def apply[A, B, C](fallback: => C = throw new UnsupportedOperationException("No fallback available"))
-                    (implicit configuration: HystrixConfiguration, executor: ExecutionContext, tA: TypeData[A], tC: TypeData[Future[C]]): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] = {
+                    (implicit configuration: HystrixConfiguration, executor: ExecutionContext, tA: TypeTagTree[A], tC: TypeTagTree[Future[C]]): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] = {
     require(configuration.timeout.isFinite(), s"Hystrix timeout must be a finite amount")
 
     (p2: ProxySpecification[A, B, B, C]) => {

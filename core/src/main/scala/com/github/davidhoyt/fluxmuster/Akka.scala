@@ -12,17 +12,17 @@ object Akka {
   case class Run[A, B, C, D](value: A, specification: ProxySpecification[A, B, C, D])
   case class Response[D](value: Try[D])
 
-  def apply[A, B, C](implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tA: TypeData[A], tC: TypeData[Future[C]]): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] =
+  def apply[A, B, C](implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tA: TypeTagTree[A], tC: TypeTagTree[Future[C]]): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] =
     apply(AkkaConfiguration())(timeout, executionContext, actorRefFactory, tA, tC)
 
-  def apply[A, B, C](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tA: TypeData[A], tC: TypeData[Future[C]]): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] =
+  def apply[A, B, C](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tA: TypeTagTree[A], tC: TypeTagTree[Future[C]]): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] =
     (p2: ProxySpecification[A, B, B, C]) => {
       val downstream = run(p2, configuration, timeout, executionContext, actorRefFactory)_
       val upstream = identity[Future[C]]_
       ProxySpecification(Metadata(Macros.nameOf[Akka.type], tA, tC, tC, tC) +: p2.metadata, downstream, upstream, p2.connections)
     }
 
-  def par[A, B, C](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tA: TypeData[A], tC: TypeData[Future[C]]): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] = {
+  def par[A, B, C](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tA: TypeTagTree[A], tC: TypeTagTree[Future[C]]): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] = {
     (p2: ProxySpecification[A, B, B, C]) => {
       val downstream = runParallel(p2, configuration, timeout, executionContext, actorRefFactory)_
       val upstream = identity[Future[C]]_

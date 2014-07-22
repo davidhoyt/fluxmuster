@@ -50,15 +50,15 @@ package object fluxmuster {
       proxy(p2)
   }
 
-  implicit def functionToDownstreamProxySpecification[A, B, C](fn: A => B)(implicit tA: TypeData[A], tB: TypeData[B], tC: TypeData[C]): ProxySpecification[A, B, C, C] =
+  implicit def functionToDownstreamProxySpecification[A, B, C](fn: A => B)(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C]): ProxySpecification[A, B, C, C] =
     ProxySpecification(Metadata("<function>", tA, tB, tC, tC))(fn, identity)
 
   implicit class Function1Enhancements[A, B](val fn: A => B) extends AnyVal {
-    def <~>[C, D, E](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeData[A], tB: TypeData[B], tC: TypeData[C], tD: TypeData[D], tE: TypeData[E]): ProxySpecification[A, C, D, E] =
+    def <~>[C, D, E](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D], tE: TypeTagTree[E]): ProxySpecification[A, C, D, E] =
       connect(p2)(tA, tB, tC, tD, tE)
 
     //TODO: FIX!!
-    def connect[C, D, E](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeData[A], tB: TypeData[B], tC: TypeData[C], tD: TypeData[D], tE: TypeData[E]): ProxySpecification[A, C, D, E] = {
+    def connect[C, D, E](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D], tE: TypeTagTree[E]): ProxySpecification[A, C, D, E] = {
 //      val f: ProxySpecification[A, B, D, D] = functionToDownstreamProxySpecification(fn)(tA, tB, tD)
 //      val f2 = new ProxySpecificationEnhancements[A, B, D, D](f).connect(p2)
 //      f2
@@ -66,14 +66,14 @@ package object fluxmuster {
     }
   }
 
-  implicit def tuple2Function1ToProxySpecification[A, B, C, D](t: (A => B, C => D))(implicit tA: TypeData[A], tB: TypeData[B], tC: TypeData[C], tD: TypeData[D]): ProxySpecification[A, B, C, D] =
+  implicit def tuple2Function1ToProxySpecification[A, B, C, D](t: (A => B, C => D))(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D]): ProxySpecification[A, B, C, D] =
     FnTuple2(t)(tA, tB, tC, tD)
 
   implicit class Tuple2Function1Enhancements[A, B, E, F](val t: (A => B, E => F)) extends AnyVal {
-    def <~>[C, D](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeData[A], tB: TypeData[B], tE: TypeData[E], tF: TypeData[F]): ProxySpecification[A, C, D, F] =
+    def <~>[C, D](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tE: TypeTagTree[E], tF: TypeTagTree[F]): ProxySpecification[A, C, D, F] =
       connect(p2)(tA, tB, tE, tF)
 
-    def connect[C, D](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeData[A], tB: TypeData[B], tE: TypeData[E], tF: TypeData[F]): ProxySpecification[A, C, D, F] =
+    def connect[C, D](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tE: TypeTagTree[E], tF: TypeTagTree[F]): ProxySpecification[A, C, D, F] =
       FnTuple2(t)(tA, tB, tE, tF) <~> p2
   }
 

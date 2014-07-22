@@ -16,7 +16,7 @@ class ProxySpecificationSpec extends UnitSpec {
     val a3 = Identity[Seq[Seq[Seq[(Int, String, Double)]]], Seq[Int]]("a3")
     val aa = FnTuple2((((x: Int) => x.toString), ((x: Long) => x.toDouble)))
     val aaa = FnTuple2("a2")((((x: Int) => x.toString), ((x: Long) => x.toDouble)))
-    println(a0.metadata.toShortString)
+    println(a0.metadata.toString)
     println(a1.metadata.toShortString)
     println(a2.metadata.toShortString)
     println(a3.metadata.toShortString)

@@ -2,11 +2,14 @@ package com.github.davidhoyt.fluxmuster
 
 import scala.reflect.runtime.universe._
 
-sealed case class TypeDataTree[T](typeParameters: Vector[TypeDataTree[_]])(implicit tag: TypeTag[T]) {
-  val tpe = tag.tpe
-  val symbol = tpe.typeSymbol
+sealed case class TypeTagTreeNode[T](source: TypeTagTreeSource, typeParameters: Vector[TypeTagTree[_]])(implicit tag: TypeTag[T]) extends TypeTagTree[T] {
+  val tpe =
+    tag.tpe
 
-  private[this] lazy val asShortString = {
+  val symbol =
+    tpe.typeSymbol
+
+  private[this] val asShortString = {
     val (typeName, typeParamsStart, typeParams, typeParamsEnd) =
       if (typeParameters.isEmpty)
         (symbol.name.decoded, "", "", "")
@@ -17,7 +20,7 @@ sealed case class TypeDataTree[T](typeParameters: Vector[TypeDataTree[_]])(impli
     s"$typeName$typeParamsStart$typeParams$typeParamsEnd"
   }
 
-  lazy val typeParametersAsShortString = {
+  private[this] val typeParametersAsShortString = {
     val sb = StringBuilder.newBuilder
     for ((typeParam, idx) <- typeParameters.zipWithIndex) {
       if (idx > 0)
@@ -27,7 +30,7 @@ sealed case class TypeDataTree[T](typeParameters: Vector[TypeDataTree[_]])(impli
     sb.toString()
   }
 
-  def toShortString: String =
+  val toShortString =
     asShortString
 
   override def toString: String =
@@ -41,44 +44,78 @@ sealed trait RuntimeMirror {
     runtimeMirror(Thread.currentThread().getContextClassLoader)
 }
 
-sealed case class TypePosition(enclosingClassFullName: Option[String], source: String, line: Int, column: Int, index: Int) extends RuntimeMirror {
-  val enclosingClassSymbol =
-    enclosingClassFullName map mirror.staticClass
+/**
+ *
+ * @param source
+ * @param line
+ * @param column
+ * @param index
+ */
+sealed case class TypeTagTreeSource(source: String, line: Int, column: Int, index: Int)
 
-  val enclosingClassType =
-    enclosingClassSymbol map (_.toType)
+sealed trait TypeTagTree[T] {
+  val tpe: Type
+  val symbol: Symbol
+  val typeParameters: Seq[TypeTagTree[_]]
+  val source: TypeTagTreeSource
+  def toShortString: String
 }
 
-sealed case class TypeData[T](tree: TypeDataTree[T], position: TypePosition) extends RuntimeMirror {
+sealed case class TypeTagTreeEntry[T](private val root: TypeTagTreeNode[T], source: TypeTagTreeSource) extends TypeTagTree[T] {
   val tpe =
-    tree.tpe
+    root.tpe
 
   val symbol =
-    tree.symbol
+    root.symbol
 
-  def toShortString: String =
-    s"TypeData(${tree.toShortString}, $position)"
+  val typeParameters =
+    root.typeParameters
+
+  val toShortString =
+    root.toShortString
 
   override def toString: String =
-    s"TypeData(${tree.toString}, $position)"
+    s"TypeTagTree(${root.toString}, $source)"
 }
 
-object TypeData {
+object TypeTagTree {
   import scala.language.experimental.macros
 
-  implicit def apply[T]: TypeData[T] =
+  /**
+   * The use of `implicit def` is to behave similar to [[scala.reflect.api.TypeTags.TypeTag]] in that the compiler
+   * will call our macro to conjure an instance when needed.
+   *
+   * @tparam T The type whose type tag tree will be generated
+   * @return An instance of [[TypeTagTree]]
+   */
+  implicit def apply[T]: TypeTagTree[T] =
     macro Macros.typeData[T]
+
+  def unapply[T](ttt: TypeTagTree[T]): Option[(Symbol, Type, Seq[TypeTagTree[_]], TypeTagTreeSource)] =
+    PartialFunction.condOpt(ttt) {
+      case t => (t.symbol, t.tpe, t.typeParameters, t.source)
+    }
 
   private object Macros {
     import scala.reflect.macros._
     import scala.reflect.runtime.universe._
 
-    def typeData[T : c.WeakTypeTag](c: Context): c.Expr[TypeData[T]] = {
+    def typeData[T : c.WeakTypeTag](c: Context): c.Expr[TypeTagTree[T]] = {
       import c.universe._
 
       val t = c.weakTypeOf[T]
       val symbol = t.typeSymbol.asType
       val pos = c.enclosingPosition
+
+      //Create a TypeTagTreeSource instance
+      val file = c.literal(pos.source.toString())
+      val line = c.literal(pos.line)
+      val column = c.literal(pos.column)
+      val index = c.literal(pos.startOrPoint)
+      val typeTagTreeSource =
+        reify {
+          TypeTagTreeSource(file.splice, line.splice, column.splice, index.splice)
+        }
 
       /**
        * Takes a string like "foo.bar.qux" and converts it to:
@@ -109,11 +146,11 @@ object TypeData {
             ),
             newTermName("fluxmuster")
           ),
-          newTermName("TypeDataTree")
+          newTermName("TypeTagTreeNode")
         )
        */
-      val selectTypeDataTree =
-        selectWith(typeOf[TypeDataTree[_]].typeSymbol.fullName)
+      val selectTypeTagTreeNode =
+        selectWith(typeOf[TypeTagTreeNode[_]].typeSymbol.fullName)
 
       /*
         Select(
@@ -134,16 +171,19 @@ object TypeData {
        *
        * Reify is not eligible because in 2.10 we're unable to splice a List
        */
-      def typeDataTree(value: c.Type)(typeParameters: List[c.Tree]): c.Tree = {
+      def typeTagTreeEntry(value: c.Type)(typeParameters: List[c.Tree]): c.Tree = {
         Apply(
           TypeApply(
-            selectTypeDataTree,
+            selectTypeTagTreeNode,
             List(
+              //type
               TypeTree(value)
             )
           ),
           List(
-            //children
+            //source
+            typeTagTreeSource.tree,
+            //typeParameters
             Apply(
               Select(
                 selectVector,
@@ -158,29 +198,20 @@ object TypeData {
       def toRuntimeUniverse(tpe: c.Type): c.Tree =
         c.reifyType(treeBuild.mkRuntimeUniverseRef, EmptyTree, tpe)
 
-      def tryIt(tpe: c.Type): c.Tree = {
+      def generateTree(tpe: c.Type): c.Tree = {
         val normalized = tpe.normalize
         normalized match {
           case TypeRef(_, sym, args) =>
-            typeDataTree(normalized)(args.map(x => tryIt(x)))
+            typeTagTreeEntry(normalized)(args.map(x => generateTree(x)))
           case _ =>
             EmptyTree
         }
       }
 
-      val tree = c.Expr[TypeDataTree[T]](tryIt(t))
-      val file = c.literal(pos.source.toString())
-      val line = c.literal(pos.line)
-      val column = c.literal(pos.column)
-      val index = c.literal(pos.startOrPoint)
-      val enclosingClassFullName =
-        if (c.enclosingClass.isEmpty)
-          c.literalNull
-        else
-          c.literal(c.enclosingClass.symbol.fullName)
+      val root = c.Expr[TypeTagTreeNode[T]](generateTree(t))
 
       reify {
-        TypeData[T](tree.splice, TypePosition(Option(enclosingClassFullName.splice), file.splice, line.splice, column.splice, index.splice))
+        TypeTagTreeEntry[T](root.splice, typeTagTreeSource.splice)
       }
     }
   }
