@@ -4,44 +4,55 @@ import scala.reflect.runtime.universe._
 
 sealed case class TypeTagTreeNode[T](source: TypeTagTreeSource, typeParameters: Vector[TypeTagTree[_]])(implicit tag: TypeTag[T]) extends TypeTagTree[T] {
   val tpe =
-    tag.tpe
+    tag.tpe.normalize
 
   val symbol =
-    tpe.typeSymbol
+    tpe.typeSymbol.asType
 
-  private[this] val asShortString = {
+  lazy val isStructuralType =
+    "<refinement>" == symbol.name.decoded
+
+  lazy val isExistential =
+    symbol.isExistential
+
+  lazy val isTuple =
+    tpe <:< typeOf[Product] && symbol.isClass && symbol.fullName.startsWith("scala.Tuple")
+
+  lazy val name =
+    if (isExistential)
+      "_"
+    else if (isStructuralType)
+      tpe.toString
+    else
+      symbol.name.decoded
+
+  //TODO: Handle symbolic 2-param types. e.g.: ::[A, B] should be A :: B
+  private[this] lazy val asShortString = {
     val (typeName, typeParamsStart, typeParams, typeParamsEnd) =
       if (typeParameters.isEmpty)
-        (symbol.name.decoded, "", "", "")
-      else if (tpe <:< typeOf[Product])
+        (name, "", "", "")
+      else if (isTuple)
         ("", "(", typeParametersAsShortString, ")")
       else
-        (symbol.name.decoded, "[", typeParametersAsShortString, "]")
+        (name, "[", typeParametersAsShortString, "]")
     s"$typeName$typeParamsStart$typeParams$typeParamsEnd"
   }
 
-  private[this] val typeParametersAsShortString = {
+  private[this] lazy val typeParametersAsShortString = {
     val sb = StringBuilder.newBuilder
     for ((typeParam, idx) <- typeParameters.zipWithIndex) {
       if (idx > 0)
         sb ++= ", "
-      sb ++= typeParam.toString
+      sb ++= typeParam.toShortString
     }
     sb.toString()
   }
 
-  val toShortString =
+  lazy val toShortString =
     asShortString
 
   override def toString: String =
-    asShortString
-}
-
-sealed trait RuntimeMirror {
-  import scala.reflect.runtime.universe._
-
-  protected def mirror =
-    runtimeMirror(Thread.currentThread().getContextClassLoader)
+    s"TypeTagTree($asShortString, $source)"
 }
 
 /**
@@ -55,27 +66,10 @@ sealed case class TypeTagTreeSource(source: String, line: Int, column: Int, inde
 
 sealed trait TypeTagTree[T] {
   val tpe: Type
-  val symbol: Symbol
+  val symbol: TypeSymbol
   val typeParameters: Seq[TypeTagTree[_]]
   val source: TypeTagTreeSource
   def toShortString: String
-}
-
-sealed case class TypeTagTreeEntry[T](private val root: TypeTagTreeNode[T], source: TypeTagTreeSource) extends TypeTagTree[T] {
-  val tpe =
-    root.tpe
-
-  val symbol =
-    root.symbol
-
-  val typeParameters =
-    root.typeParameters
-
-  val toShortString =
-    root.toShortString
-
-  override def toString: String =
-    s"TypeTagTree(${root.toString}, $source)"
 }
 
 object TypeTagTree {
@@ -161,17 +155,17 @@ object TypeTagTree {
         )
        */
       val selectVector =
-        selectWith("scala.Vector")
+        selectWith(typeOf[Vector[_]].typeSymbol.fullName)
 
       /**
        * Generates an AST representing the following:
-       *   `TypeDataTree[T](Vector(typeParameters))`
+       *   `TypeTagTreeNode[T](TypeTagTreeSource(...), Vector(typeParameters))`
        * `T` is the provided type and its implicit type tag is automagically
        * found and created by the compiler.
        *
        * Reify is not eligible because in 2.10 we're unable to splice a List
        */
-      def typeTagTreeEntry(value: c.Type)(typeParameters: List[c.Tree]): c.Tree = {
+      def typeTagTreeNode(value: c.Type)(typeParameters: List[c.Tree]): c.Tree = {
         Apply(
           TypeApply(
             selectTypeTagTreeNode,
@@ -198,21 +192,49 @@ object TypeTagTree {
       def toRuntimeUniverse(tpe: c.Type): c.Tree =
         c.reifyType(treeBuild.mkRuntimeUniverseRef, EmptyTree, tpe)
 
+      def writeToFile(p: String, s: String): Unit = {
+        val pw = new java.io.PrintWriter(new java.io.File(p))
+        try pw.write(s) finally pw.close()
+      }
+
       def generateTree(tpe: c.Type): c.Tree = {
-        val normalized = tpe.normalize
-        normalized match {
-          case TypeRef(_, sym, args) =>
-            typeTagTreeEntry(normalized)(args.map(x => generateTree(x)))
+        //val normalized = tpe.normalize
+        tpe match {
+
+          //Structural type
+          case RefinedType(List(TypeRef(_, _, args)), _) =>
+            typeTagTreeNode(tpe)(List.empty)
+
+          //Existential type
+          case ExistentialType(_, tref @ TypeRef(_, _, args)) =>
+            typeTagTreeNode(tpe)(args.map(x => generateTree(x)))
+
+          //Standard type
+          case TypeRef(_, _, args) =>
+            typeTagTreeNode(tpe)(args.map(x => generateTree(x)))
+
+          //Unrecognized type
           case _ =>
             EmptyTree
         }
       }
 
-      val root = c.Expr[TypeTagTreeNode[T]](generateTree(t))
+      val root =
+        c.Expr[TypeTagTreeNode[T]](generateTree(t))
 
-      reify {
-        TypeTagTreeEntry[T](root.splice, typeTagTreeSource.splice)
-      }
+      //try {
+      //  writeToFile("/tmp/generateTree", showRaw(t))
+      //  writeToFile("/tmp/macro", showRaw(root.tree))
+      //} catch {
+      //  case t: Throwable =>
+      //    writeToFile("/tmp/macro", t.toString)
+      //    throw t
+      //}
+
+      if (!root.tree.isEmpty)
+        root
+      else
+        c.abort(pos, s"Unable to generate TypeTagTree for ${symbol.fullName}")
     }
   }
 }
