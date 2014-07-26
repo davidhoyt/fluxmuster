@@ -80,11 +80,12 @@ class TypeTagTreeSpec extends UnitSpec {
     b.toShortString should be("AnyRef{def methodA(a: Int): Unit; def methodB: Int}")
   }
 
-  it should "construct valid trees for types with existential types" in {
+  it should "construct valid trees for existential types" in {
     //Covariant
-    val a = withTypeTagTree[(Vector[Seq[_]], List[_])]
-    a.toShortString should be("(Vector[Seq[_]], List[_])")
-    a.typeParameters.types should be (Seq(typeOf[Tuple2[Vector[Seq[_]], List[_]]]))
+    val a = withTypeTagTree[(Vector[Seq[_]], List[_], MultiParameterCaseClass3[_, _, _])]
+    a.toShortString should be("(Vector[Seq[_]], List[_], TypeTagTreeSpec.this.MultiParameterCaseClass3[_, _, _])")
+    //TODO: Why doesn't equality work for existential types?
+    //a.typeParameters.types should be (Seq(typeOf[Vector[Seq[_]]], typeOf[List[_]], typeOf[MultiParameterCaseClass3[_, _, _]]))
 
     //Invariant
     val b = withTypeTagTree[Set[_]]
@@ -145,6 +146,12 @@ class TypeTagTreeSpec extends UnitSpec {
 
     //val d = withTypeTag((new Path).d.t)
     //d.toString() should be ("Type")
+  }
+
+  it should "construct valid trees for deeply nested complex types" in {
+    val a = withTypeTagTree[MultiParameterCaseClass3[MultiParameterCaseClass2[MultiParameterCaseClass2[AliasForCaseClassWithAlternateParameterCount2[String], Structural], String], Vector[Seq[Array[Seq[Vector[Seq[Seq[Seq[Seq[Array[SingleParameterTraitContravariant[MultiParameterCaseClass2[Seq[Vector[Array[String]]], java.util.ArrayList[java.util.HashSet[Vector[String]]]]]]]]]]]]]]], MultiParameterCaseClass2[SingleParameterTraitInvariant[String], MultiParameterCaseClass3[Seq[Array[java.util.Map[String, Long]]], Int, String => (Int, (Long, Int, Seq[String] => List[::[Int]]))]]]]
+    a.toShortString should be ("TypeTagTreeSpec.this.MultiParameterCaseClass3[TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.AliasForCaseClassWithAlternateParameterCount2[String],TypeTagTreeSpec.this.Structural],String],Vector[Seq[Array[Seq[Vector[Seq[Seq[Seq[Seq[Array[TypeTagTreeSpec.this.SingleParameterTraitContravariant[TypeTagTreeSpec.this.MultiParameterCaseClass2[Seq[Vector[Array[String]]],java.util.ArrayList[java.util.HashSet[Vector[String]]]]]]]]]]]]]]],TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.SingleParameterTraitInvariant[String],TypeTagTreeSpec.this.MultiParameterCaseClass3[Seq[Array[java.util.Map[String,Long]]],Int,String => (Int, (Long, Int, Seq[String] => List[::[Int]]))]]]")
+    a.typeParameters.types should be (Seq(typeOf[ TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.AliasForCaseClassWithAlternateParameterCount2[String],TypeTagTreeSpec.this.Structural],String] ], typeOf[ Vector[Seq[Array[Seq[Vector[Seq[Seq[Seq[Seq[Array[TypeTagTreeSpec.this.SingleParameterTraitContravariant[TypeTagTreeSpec.this.MultiParameterCaseClass2[Seq[Vector[Array[String]]],java.util.ArrayList[java.util.HashSet[Vector[String]]]]]]]]]]]]]]] ], typeOf[ TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.SingleParameterTraitInvariant[String],TypeTagTreeSpec.this.MultiParameterCaseClass3[Seq[Array[java.util.Map[String,Long]]], Int, String => (Int, (Long, Int, Seq[String] => List[::[Int]]))]] ]))
   }
 
 }

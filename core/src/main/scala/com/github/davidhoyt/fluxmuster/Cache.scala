@@ -110,18 +110,18 @@ object KeyValueProcessor {
 
 }
 
-object Projection {
+object Project {
   import KeyValueProcessor._
 
-  val NAME = Macros.nameOf[Projection.type]
+  val NAME = Macros.nameOf[Project.type]
 
-  def upstreamTuple2[X, A, V](implicit tA: TypeTagTree[X], tC: TypeTagTree[(A, V)], tD: TypeTagTree[V]): ProxySpecification[X, X, (A, V), V] =
-    upstreamTuple2(NAME)(tA, tC, tD)
+  def upstreamValue[X, A, V](implicit tA: TypeTagTree[X], tC: TypeTagTree[(A, V)], tD: TypeTagTree[V]): ProxySpecification[X, X, (A, V), V] =
+    upstreamValue(NAME)(tA, tC, tD)
 
-  def upstreamTuple2[X, A, V](name: String)(implicit tA: TypeTagTree[X], tC: TypeTagTree[(A, V)], tD: TypeTagTree[V]): ProxySpecification[X, X, (A, V), V] =
-    ProxySpecification(Metadata(name, tA, tA, tC, tD))(identity, projectTuple2)
+  def upstreamValue[X, A, V](name: String)(implicit tA: TypeTagTree[X], tC: TypeTagTree[(A, V)], tD: TypeTagTree[V]): ProxySpecification[X, X, (A, V), V] =
+    ProxySpecification(Metadata(name, tA, tA, tC, tD))(identity, projectValue)
 
-  def projectTuple2[A, V](in: (A, V)): V = {
+  def projectValue[A, V](in: (A, V)): V = {
     val (_, value) = in
     value
   }

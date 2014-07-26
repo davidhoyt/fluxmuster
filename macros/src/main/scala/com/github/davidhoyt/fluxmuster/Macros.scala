@@ -7,6 +7,9 @@ object Macros {
   def nameOf[T]: String =
     macro Run.nameOf[T]
 
+  def simpleNameOf[T]: String =
+    macro Run.simpleNameOf[T]
+
   private object Run {
     import scala.reflect.macros._
 
@@ -17,6 +20,15 @@ object Macros {
       val symbol = t.typeSymbol
 
       c.literal(symbol.fullName)
+    }
+
+    def simpleNameOf[T : c.WeakTypeTag](c: Context): c.Expr[String] = {
+      import c.universe._
+
+      val t = c.weakTypeOf[T]
+      val symbol = t.typeSymbol
+
+      c.literal(symbol.name.decoded)
     }
   }
 }

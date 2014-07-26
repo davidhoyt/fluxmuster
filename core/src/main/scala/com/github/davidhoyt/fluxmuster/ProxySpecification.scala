@@ -71,22 +71,4 @@ object ProxySpecification {
     val result = p.upstream(fromDownstream)
     result
   }
-
-  implicit def functionToProxySpecification[A, B, C, D](fn: A => B)(implicit tA: TypeTagTree[A], tB: TypeTagTree[B]): ProxySpecification[A, B, B, B] =
-    ProxySpecification(immutable.Seq(Metadata(fn.toString(), tA, tB, tB, tB)), fn, identity)
-
-  implicit class ProxySpecificationEnhancements[A, B, G, E](val p1: ProxySpecification[A, B, G, E]) extends AnyVal {
-    def <~>[C, F](p2: ProxySpecification[B, C, F, G]): ProxySpecification[A, C, F, E] =
-      connect(p2)
-    def connect[C, F](p2: ProxySpecification[B, C, F, G]): ProxySpecification[A, C, F, E] =
-      combine(p1, p2)
-
-    def <~>[C, F](link: LinkDownstream[B, C])(implicit tA: TypeTagTree[A], tC: TypeTagTree[C], tG: TypeTagTree[G], tE: TypeTagTree[E]): ProxySpecification[A, C, G, E] =
-      connect(link)(tA, tC, tG, tE)
-    def connect[C, F](link: LinkDownstream[B, C])(implicit tA: TypeTagTree[A], tC: TypeTagTree[C], tG: TypeTagTree[G], tE: TypeTagTree[E]): ProxySpecification[A, C, G, E] = {
-      val spec = ProxySpecification(immutable.Seq(Metadata(link.toString(), tA, tC, tG, tE)), link, identity[G])
-      val combined = combine(p1, spec)
-      combined
-    }
-  }
 }

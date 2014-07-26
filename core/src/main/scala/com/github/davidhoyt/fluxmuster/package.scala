@@ -1,7 +1,5 @@
 package com.github.davidhoyt
 
-import com.github.davidhoyt.fluxmuster.ProxySpecification.ProxySpecificationEnhancements
-
 import scala.collection._
 
 package object fluxmuster {
@@ -51,19 +49,28 @@ package object fluxmuster {
   }
 
   implicit def functionToDownstreamProxySpecification[A, B, C](fn: A => B)(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C]): ProxySpecification[A, B, C, C] =
-    ProxySpecification(Metadata("<function>", tA, tB, tC, tC))(fn, identity)
+    Downstream[A, B, C](fn)(tA, tB, tC)
 
-  implicit class Function1Enhancements[A, B](val fn: A => B) extends AnyVal {
+  implicit class Function1ConnectEnhancements[A, B](val fn: A => B) extends AnyVal {
     def <~>[C, D, E](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D], tE: TypeTagTree[E]): ProxySpecification[A, C, D, E] =
       connect(p2)(tA, tB, tC, tD, tE)
 
-    //TODO: FIX!!
-    def connect[C, D, E](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D], tE: TypeTagTree[E]): ProxySpecification[A, C, D, E] = {
-//      val f: ProxySpecification[A, B, D, D] = functionToDownstreamProxySpecification(fn)(tA, tB, tD)
-//      val f2 = new ProxySpecificationEnhancements[A, B, D, D](f).connect(p2)
-//      f2
-      ???
-    }
+    def connect[C, D, E](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D], tE: TypeTagTree[E]): ProxySpecification[A, C, D, E] =
+      Downstream[A, B, E](fn)(tA, tB, tE) connect p2
+  }
+
+  implicit class Function1BiDirectionalEnhancements[A, B](val fn: A => B) extends AnyVal {
+    def <~[C, D](upstreamNext: LinkUpstream[C, A])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D]): ProxySpecification[D, D, C, B] =
+      upstream(upstreamNext)(tA, tB, tC, tD)
+
+    def upstream[C, D](upstreamNext: LinkUpstream[C, A])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D]): ProxySpecification[D, D, C, B] =
+      Upstream[D, A, B](fn)(tD, tA, tB) connect Upstream[D, C, A](upstreamNext)(tD, tC, tA)
+
+    def ~>[C, D](next: LinkDownstream[B, C])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D]): ProxySpecification[A, C, D, D] =
+      downstream(next)(tA, tB, tC, tD)
+
+    def downstream[C, D](next: LinkDownstream[B, C])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D]): ProxySpecification[A, C, D, D] =
+      Downstream[A, B, D](fn)(tA, tB, tD) connect Downstream[B, C, D](next)(tB, tC, tD)
   }
 
   implicit def tuple2Function1ToProxySpecification[A, B, C, D](t: (A => B, C => D))(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D]): ProxySpecification[A, B, C, D] =
@@ -75,6 +82,34 @@ package object fluxmuster {
 
     def connect[C, D](p2: ProxySpecification[B, C, D, E])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tE: TypeTagTree[E], tF: TypeTagTree[F]): ProxySpecification[A, C, D, F] =
       FnTuple2(t)(tA, tB, tE, tF) <~> p2
+  }
+
+  implicit def functionToProxySpecification[A, B, C, D](fn: A => B)(implicit tA: TypeTagTree[A], tB: TypeTagTree[B]): ProxySpecification[A, B, B, B] =
+    ProxySpecification(immutable.Seq(Metadata(fn.toString(), tA, tB, tB, tB)), fn, identity)
+
+  implicit class ProxySpecificationConnectEnhancements[A, B, G, E](val p1: ProxySpecification[A, B, G, E]) extends AnyVal {
+    def <~>[C, F](p2: ProxySpecification[B, C, F, G]): ProxySpecification[A, C, F, E] =
+      connect(p2)
+
+    def connect[C, F](p2: ProxySpecification[B, C, F, G]): ProxySpecification[A, C, F, E] =
+      ProxySpecification.combine(p1, p2)
+
+    def <~>[C, F](link: LinkDownstream[B, C])(implicit tA: TypeTagTree[A], tC: TypeTagTree[C], tG: TypeTagTree[G], tE: TypeTagTree[E]): ProxySpecification[A, C, G, E] =
+      connect(link)(tA, tC, tG, tE)
+
+    def connect[C, F](link: LinkDownstream[B, C])(implicit tA: TypeTagTree[A], tC: TypeTagTree[C], tG: TypeTagTree[G], tE: TypeTagTree[E]): ProxySpecification[A, C, G, E] = {
+      val spec = ProxySpecification(immutable.Seq(Metadata(link.toString(), tA, tC, tG, tE)), link, identity[G])
+      val combined = ProxySpecification.combine(p1, spec)
+      combined
+    }
+  }
+
+  implicit class ProxySpecificationBiDirectionalEnhancements[A, B, C, D](val spec: ProxySpecification[A, B, C, D])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C]) {
+    def <~[E](onUpstream: LinkUpstream[E, C])(implicit tE: TypeTagTree[E]): ProxySpecification[A, B, E, D] =
+      spec connect Upstream[B, E, C](onUpstream)(tB, tE, tC)
+
+    def ~>[E](onDownstream: LinkDownstream[B, E])(implicit tE: TypeTagTree[E]): ProxySpecification[A, E, C, D] =
+      spec connect Downstream[B, E, C](onDownstream)(tB, tE, tC)
   }
 
   implicit class ConnectedMetadataEnhancements(val connectedMetadata: ConnectedMetadata) extends AnyVal {
