@@ -68,8 +68,10 @@ object Fooz {
     })
 
     val step1 = LogIt1 <~> LogIt2 <~> LogIt3 <~> ((x: Int) => x + 0, (y: Long) => y)
-    val step3 = Project.upstreamValue[Int, Int, Long] <~> Cache[Int, Long] <~> KeyValueProcessor[Int, Int, Long] { k: Int => println(s"IN KVProcessor: $k"); k + 1L }
-
+    val step2 = Project.upstreamValue[Int, Int, Long] <~> Cache[Int, Long] <~> KeyValueProcessor[Int, Int, Long] { k: Int => println(s"IN KVProcessor: $k"); k + 1L }
+    val step3 = step1 <~> step2
+    val akkaize = Akka.par(AkkaConfiguration()) |> step3
+    //val hystrixize = Hystrix(0L) |> step3
 //    val z = Projection.upstream[Int, Int, Int] <~> Cache[Int, Int](inMemory) <~> KeyValueProcessor[Int, Int, Int] { k => println(s"IN KVProcessor: $k"); k + 1 }
 //    val o = Identity[Int, String] <~> ((x: Int) => x + 0, (y: Long) => y.toString) <~> Identity[Int, Long] <~> Projection.upstreamTuple2[Int, Int, Long] <~> Cache[Int, Long](inMemory) <~> KeyValueProcessor[Int, Int, Long] { k => println(s"IN KVProcessor: $k"); k + 1L }
 //    val fa: ProxySpecification[String, Future[Long], Future[Long], Future[Long]] =
@@ -77,13 +79,17 @@ object Fooz {
 //    val fb: ProxySpecification[String, Future[Future[Long]], Future[Future[Long]], Future[Future[Long]]] = (Hystrix(fallback = Future.successful(100L)) |> fa)
 //    val f: ProxySpecification[String, Future[Future[Long]], Future[Future[Long]], Future[Long]] = Join("") <~> fb
 //    f
-    null
+    akkaize
   }
   println(hys)
   println(hys.connections)
   println(Ehcache.availableCaches)
-  for(i <- 0 until 1000) {
-//    hys(s"${i % 250}") map { x => println(s"$i: $x") }
+  for(i <- 0 until 3) {
+    //val r = Await.result(hys(s"${i % 250}"), 2.seconds)
+    //println(s"$i: $r")
+    hys(s"${i % 250}") map { x =>
+      println(s"$i: $x")
+    }
     //if (i % 50 == 0)
     //  Thread.sleep(1)
   }
@@ -204,6 +210,7 @@ object Foo {
 //  val f = R[String, Int, Int, Int]{x => println(x); x.toInt}(R.identity)
 //  def run = f.run("START")
   def run() = {
+    println(Fooz.hys)
 //    println(Fooz.proxy1)
 //    println(Fooz.proxy1("234"))
   }

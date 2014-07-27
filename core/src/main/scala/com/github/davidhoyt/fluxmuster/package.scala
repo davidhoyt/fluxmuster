@@ -32,6 +32,7 @@ package object fluxmuster {
   type ProxyLift[A, B, C, D, E, F, G, H] =
     ProxySpecification[A, B, C, D] => ProxySpecification[E, F, G, H]
 
+  import scala.language.higherKinds
   import scala.language.implicitConversions
 
 //  implicit def toProxyLift[A, B, C, D, E, F, G, H](fn: FnProxyLift[A, B, C, D, E, F, G, H]): ProxyLift[A, B, C, D, E, F, G, H] =
@@ -46,6 +47,31 @@ package object fluxmuster {
 
     def lift(p2: ProxySpecification[A, B, C, D]): ProxySpecification[E, F, G, H] =
       proxy(p2)
+  }
+
+  /**
+   * Intended for use by [[ProxyLift]] implementers to aid the compiler in
+   * capturing type information that may not be normally easily accessible
+   * when using the pure functional approach. This allows type inference to
+   * be deferred to when the [[ProxyLift]] is applied to a [[ProxySpecification]]
+   * instance.
+   *
+   * @tparam F A type constructor that implementers will lift types into
+   */
+  trait ProxyLiftDownstreamWithHint[T, F[_]] {
+    protected def name: String
+    protected def downstream[A, B, C](p2: ProxySpecification[A, B, B, C])(implicit evidence: T <:< C): LinkDownstream[A, F[C]]
+
+    def |>[A, B, C](spec: ProxySpecification[A, B, B, C])(implicit evidence: T <:< C, tA: TypeTagTree[A], tC: TypeTagTree[F[C]]): ProxySpecification[A, F[C], F[C], F[C]] =
+      lift(spec)
+
+    def lift[A, B, C](spec: ProxySpecification[A, B, B, C])(implicit evidence: T <:< C, tA: TypeTagTree[A], tC: TypeTagTree[F[C]]): ProxySpecification[A, F[C], F[C], F[C]] = {
+      val liftedName = name
+      val liftedUpstream = identity[F[C]] _
+      val liftedDownstream = downstream(spec)
+
+      ProxySpecification(Metadata(liftedName, tA, tC, tC, tC, s"$liftedName[${tA.toShortString}, ${tC.toShortString}]") +: spec.metadata, liftedDownstream, liftedUpstream, spec.connections)
+    }
   }
 
   implicit def functionToDownstreamProxySpecification[A, B, C](fn: A => B)(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C]): ProxySpecification[A, B, C, C] =
@@ -122,6 +148,43 @@ package object fluxmuster {
       }
       sb.toString()
     }
+  }
+
+  /**
+   * Given a sequence it produces another sequence of tuples that each contain the
+   * previous element, the current, and the next element in the sequence.
+   *
+   * For example:
+   * {{{
+   *   scala> prevCurrentNext(Seq(0, 1, 2, 3)){case x => x}
+   *   res0: Seq[(Int, Int, Int)] = List((None, 0, Some(1)), (Some(0), 1, Some(2)), (Some(1), 2, Some(3)), (Some(2), 3, None))
+   * }}}
+   *
+   * @param xs The sequence to use
+   * @param fn A partial function that maps the previous, current, and next elements
+   * @tparam T Type of the sequence to use
+   * @tparam U Type of the sequence that will be output after mapping through `fn`
+   * @return A new sequence after applying `fn` to the previous, current, and next elements
+   */
+  def prevCurrentNext[T, U](xs: Seq[T])(fn: PartialFunction[(Option[T], T, Option[T]), U]): Seq[U] = {
+    def step(prev: Option[T], xs: Seq[T], build: Seq[U]): Seq[U] = {
+      val (current, next) = xs match {
+        case x +: y +: _ => (Some(x), Some(y))
+        case x +: _ => (Some(x), None)
+        case _ => (None, None)
+      }
+
+      if (xs.nonEmpty) {
+        val buildNext =
+          if (fn.isDefinedAt(prev, current.get, next))
+            build :+ fn(prev, current.get, next)
+          else
+            build
+        step(current, xs.tail, buildNext)
+      } else
+        build
+    }
+    step(None, xs, Seq.empty)
   }
 
   trait Logger {

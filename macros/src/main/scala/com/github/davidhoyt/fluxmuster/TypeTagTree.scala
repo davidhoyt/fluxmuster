@@ -8,14 +8,14 @@ sealed case class TypeTagTreeNode[T](source: TypeTagTreeSource, tpe: Type) exten
   val symbol =
     tpe.typeSymbol.asType
 
-  val typeParameters =
+  val typeArguments =
     evaluate(tpe)
 
   val isRefined =
     refined(tpe)
 
   private def evaluate(t: Type) =
-    recursivelyMapTypeParameters(t)(x => TypeTagTreeNode(source, x))
+    recursivelyMapTypeArguments(t)(x => TypeTagTreeNode(source, x))
 }
 
 object TypeTagTreeNode {
@@ -41,17 +41,17 @@ object TypeTagTreeNode {
    *           instances of [[scala.reflect.runtime.universe.Type]]
    * @return
    */
-  def recursivelyMapTypeParameters[A](t: Type)(fn: Type => A): Vector[A] = {
+  def recursivelyMapTypeArguments[A](t: Type)(fn: Type => A): Vector[A] = {
     def process(xs: List[Type]): Vector[A] = {
       xs.toVector.map(fn)
     }
 
     //The most important logic in this file. This describes how to
-    //destructure and extract (if any) type parameters for this type.
+    //destructure and extract (if any) type arguments for this type.
     //
     //The most important thing to keep in mind is that the "type" is actually
     //an AST where the type can be represented by any of a number of case classes
-    //that changes how their type parameters are accessed.
+    //that changes how their type arguments are accessed.
     t match {
       //Anonymous type such as "new Foo[String] {}"
       case RefinedType(TypeRef(_, anyRefSymbol, _) :: typeRefs, _) if anyRefSymbol.fullName == "scala.AnyRef" =>
@@ -65,13 +65,17 @@ object TypeTagTreeNode {
       case ExistentialType(/*quantified*/_, underlying) =>
         process(List(underlying))
 
+      //Annotated type
+      case AnnotatedType(x, underlying, _) =>
+        process(List(underlying))
+
       //Standard type
       case TypeRef(_, _, args) =>
         process(args)
 
       //Unrecognized type
       case _ =>
-        throw new IllegalStateException(s"Unable to determine type parameters for $t")
+        throw new IllegalStateException(s"Unable to determine type arguments for $t")
     }
   }
 }
@@ -86,7 +90,7 @@ object TypeTagTreeNode {
  */
 sealed case class TypeTagTreeSource(source: String, line: Int, column: Int, index: Int)
 
-@scala.annotation.implicitNotFound("No TypeTagTree available for ${T}")
+@scala.annotation.implicitNotFound("No TypeTagTree available for ${T}. If there are type arguments, please consider providing explicit types for all of them.")
 sealed trait TypeTagTree[T] {
   /** The [[scala.reflect.runtime.universe.Type]] that this instance represents. */
   val tpe: scala.reflect.runtime.universe.Type
@@ -94,8 +98,8 @@ sealed trait TypeTagTree[T] {
   /** The [[scala.reflect.runtime.universe.TypeSymbol]] that this instance represents. */
   val symbol: scala.reflect.runtime.universe.TypeSymbol
 
-  /** The type parameters, if any, for this [[scala.reflect.runtime.universe.Type]]. */
-  val typeParameters: Seq[TypeTagTree[_]]
+  /** The type arguments, if any, for this [[scala.reflect.runtime.universe.Type]]. */
+  val typeArguments: Seq[TypeTagTree[_]]
 
   /** Provides information about where this [[TypeTagTree]] instance is being used. */
   val source: TypeTagTreeSource
@@ -131,7 +135,7 @@ object TypeTagTree {
 
   /**
    * Provides an extractor for getting the [[scala.reflect.runtime.universe.TypeSymbol]],
-   * the [[scala.reflect.runtime.universe.Type]], the type parameters, and the [[TypeTagTreeSource]]
+   * the [[scala.reflect.runtime.universe.Type]], the type arguments, and the [[TypeTagTreeSource]]
    * for a [[TypeTagTree]].
    * @param ttt The [[TypeTagTree]] instance that will be extracted
    * @tparam T The [[scala.reflect.runtime.universe.Type]] for the [[TypeTagTree]]
@@ -139,7 +143,7 @@ object TypeTagTree {
    */
   def unapply[T](ttt: TypeTagTree[T]): Option[(TypeSymbol, Type, Seq[TypeTagTree[_]], TypeTagTreeSource)] =
     PartialFunction.condOpt(ttt) {
-      case t => (t.symbol, t.tpe, t.typeParameters, t.source)
+      case t => (t.symbol, t.tpe, t.typeArguments, t.source)
     }
 
   private object Macros {
@@ -205,7 +209,7 @@ object TypeTagTree {
        * `T` is the provided type and its implicit type tag is automagically
        * found and created by the compiler.
        *
-       * Reify is not eligible because in 2.10 we're unable to splice a type parameter
+       * Reify is not eligible because in 2.10 we're unable to splice a type argument.
        */
       def typeTagTreeNode(value: c.Type): c.Tree =
         Apply(

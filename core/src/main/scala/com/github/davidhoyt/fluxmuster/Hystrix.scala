@@ -1,9 +1,11 @@
 package com.github.davidhoyt.fluxmuster
 
+import akka.actor.ActorRefFactory
+import akka.util.Timeout
 import com.netflix.hystrix.HystrixCommand
 import scala.concurrent.duration._
 
-case class HystrixConfiguration(group: String, command: String, timeout: Duration = 1.second, builder: HystrixCommand.Setter => HystrixCommand.Setter = identity)
+case class HystrixConfiguration(group: String = "default", command: String = "default", timeout: Duration = 1.second, builder: HystrixCommand.Setter => HystrixCommand.Setter = identity)
 
 object Hystrix {
   import com.netflix.hystrix.{HystrixCommandGroupKey, HystrixCommandKey, HystrixCommandProperties}
@@ -16,14 +18,24 @@ object Hystrix {
   type HystCommandNeedsFallback[-A, B] = B => A => Future[B]
   type HystCommand[-A, +B] = A => Future[B]
 
-  def apply[A, B, C](fallback: => C = throw new UnsupportedOperationException("No fallback available"))
-                    (implicit configuration: HystrixConfiguration, executor: ExecutionContext, tA: TypeTagTree[A], tC: TypeTagTree[Future[C]]): ProxyLift[A, B, B, C, A, Future[C], Future[C], Future[C]] = {
-    require(configuration.timeout.isFinite(), s"Hystrix timeout must be a finite amount")
+  val NAME = Macros.simpleNameOf[Hystrix.type]
 
-    (p2: ProxySpecification[A, B, B, C]) => {
-      val downstream = construct[A, C](configuration)(ProxySpecification.run(p2)).apply(fallback)
-      val upstream = identity[Future[C]]_
-      ProxySpecification(Metadata(Macros.nameOf[Hystrix.type], tA, tC, tC, tC) +: p2.metadata, downstream, upstream, p2.connections)
+  def apply[T](fallback: => T = throw new UnsupportedOperationException("No fallback available"))
+              (implicit configuration: HystrixConfiguration, timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLiftDownstreamWithHint[T, Future] =
+    apply(configuration)(fallback)
+
+  def apply[T](configuration: HystrixConfiguration)(fallback: => T = throw new UnsupportedOperationException("No fallback available"))
+              (implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLiftDownstreamWithHint[T, Future] = {
+
+    require(timeout.duration.isFinite(), s"Hystrix timeout must be a finite amount")
+
+    //Override the configuration with the provided timeout.
+    val adjustedConfiguration = configuration.copy(timeout = timeout.duration)
+
+    new ProxyLiftDownstreamWithHint[T, Future] {
+      protected val name = NAME
+      protected def downstream[A, B, C](spec: ProxySpecification[A, B, B, C])(implicit evidence: T <:< C): LinkDownstream[A, Future[C]] =
+        construct[A, C](adjustedConfiguration)(ProxySpecification.run(spec)).apply(evidence(fallback))
     }
   }
 

@@ -99,15 +99,15 @@ class TypeTagTreeSpec extends UnitSpec {
   it should "construct valid trees for functions" in {
     val a = withTypeTagTree[String => Int]
     a.toShortString should be ("String => Int")
-    a.typeParameters.types should be (Seq(typeOf[String], typeOf[Int]))
+    a.typeArguments.types should be (Seq(typeOf[String], typeOf[Int]))
 
     val b = withTypeTagTree[(String, String) => Int]
     b.toShortString should be ("(String, String) => Int")
-    b.typeParameters.types should be (Seq(typeOf[String], typeOf[String], typeOf[Int]))
+    b.typeArguments.types should be (Seq(typeOf[String], typeOf[String], typeOf[Int]))
 
     val c = withTypeTagTree[((String, String)) => Int]
     c.toShortString should be ("((String, String)) => Int")
-    c.typeParameters.types should be (Seq(typeOf[(String, String)], typeOf[Int]))
+    c.typeArguments.types should be (Seq(typeOf[(String, String)], typeOf[Int]))
   }
 
   //it should "construct valid trees for higher-kinded types" in {
@@ -124,14 +124,14 @@ class TypeTagTreeSpec extends UnitSpec {
 
     val a = withTypeTagTree(new SingleParameterTraitContravariant[String] with SingleParameterTraitInvariant[Long] {})
     a.toShortString should be ("TypeTagTreeSpec.this.SingleParameterTraitContravariant[String] with TypeTagTreeSpec.this.SingleParameterTraitInvariant[Long]")
-    a.typeParameters.head.typeParameters.types should be (Seq(typeOf[String]))
-    a.typeParameters.types should be (Seq(typeOf[SingleParameterTraitContravariant[String]], typeOf[SingleParameterTraitInvariant[Long]]))
+    a.typeArguments.head.typeArguments.types should be (Seq(typeOf[String]))
+    a.typeArguments.types should be (Seq(typeOf[SingleParameterTraitContravariant[String]], typeOf[SingleParameterTraitInvariant[Long]]))
   }
 
   it should "construct valid trees for refined types" in {
     val a = withTypeTagTree[SingleParameterTraitInvariant[Double] with SingleParameterTraitContravariant[SingleParameterTraitInvariant[Long]]]
     a.toShortString should be ("TypeTagTreeSpec.this.SingleParameterTraitInvariant[Double] with TypeTagTreeSpec.this.SingleParameterTraitContravariant[TypeTagTreeSpec.this.SingleParameterTraitInvariant[Long]]")
-    a.typeParameters.types should be (Seq(typeOf[SingleParameterTraitInvariant[Double]], typeOf[SingleParameterTraitContravariant[SingleParameterTraitInvariant[Long]]]))
+    a.typeArguments.types should be (Seq(typeOf[SingleParameterTraitInvariant[Double]], typeOf[SingleParameterTraitContravariant[SingleParameterTraitInvariant[Long]]]))
   }
 
   it should "construct valid trees for path dependent types" in {
@@ -151,7 +151,7 @@ class TypeTagTreeSpec extends UnitSpec {
   it should "construct valid trees for deeply nested complex types" in {
     val a = withTypeTagTree[MultiParameterCaseClass3[MultiParameterCaseClass2[MultiParameterCaseClass2[AliasForCaseClassWithAlternateParameterCount2[String], Structural], String], Vector[Seq[Array[Seq[Vector[Seq[Seq[Seq[Seq[Array[SingleParameterTraitContravariant[MultiParameterCaseClass2[Seq[Vector[Array[String]]], java.util.ArrayList[java.util.HashSet[Vector[String]]]]]]]]]]]]]]], MultiParameterCaseClass2[SingleParameterTraitInvariant[String], MultiParameterCaseClass3[Seq[Array[java.util.Map[String, Long]]], Int, String => (Int, (Long, Int, Seq[String] => List[::[Int]]))]]]]
     a.toShortString should be ("TypeTagTreeSpec.this.MultiParameterCaseClass3[TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.AliasForCaseClassWithAlternateParameterCount2[String],TypeTagTreeSpec.this.Structural],String],Vector[Seq[Array[Seq[Vector[Seq[Seq[Seq[Seq[Array[TypeTagTreeSpec.this.SingleParameterTraitContravariant[TypeTagTreeSpec.this.MultiParameterCaseClass2[Seq[Vector[Array[String]]],java.util.ArrayList[java.util.HashSet[Vector[String]]]]]]]]]]]]]]],TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.SingleParameterTraitInvariant[String],TypeTagTreeSpec.this.MultiParameterCaseClass3[Seq[Array[java.util.Map[String,Long]]],Int,String => (Int, (Long, Int, Seq[String] => List[::[Int]]))]]]")
-    a.typeParameters.types should be (Seq(typeOf[ TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.AliasForCaseClassWithAlternateParameterCount2[String],TypeTagTreeSpec.this.Structural],String] ], typeOf[ Vector[Seq[Array[Seq[Vector[Seq[Seq[Seq[Seq[Array[TypeTagTreeSpec.this.SingleParameterTraitContravariant[TypeTagTreeSpec.this.MultiParameterCaseClass2[Seq[Vector[Array[String]]],java.util.ArrayList[java.util.HashSet[Vector[String]]]]]]]]]]]]]]] ], typeOf[ TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.SingleParameterTraitInvariant[String],TypeTagTreeSpec.this.MultiParameterCaseClass3[Seq[Array[java.util.Map[String,Long]]], Int, String => (Int, (Long, Int, Seq[String] => List[::[Int]]))]] ]))
+    a.typeArguments.types should be (Seq(typeOf[ TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.AliasForCaseClassWithAlternateParameterCount2[String],TypeTagTreeSpec.this.Structural],String] ], typeOf[ Vector[Seq[Array[Seq[Vector[Seq[Seq[Seq[Seq[Array[TypeTagTreeSpec.this.SingleParameterTraitContravariant[TypeTagTreeSpec.this.MultiParameterCaseClass2[Seq[Vector[Array[String]]],java.util.ArrayList[java.util.HashSet[Vector[String]]]]]]]]]]]]]]] ], typeOf[ TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.SingleParameterTraitInvariant[String],TypeTagTreeSpec.this.MultiParameterCaseClass3[Seq[Array[java.util.Map[String,Long]]], Int, String => (Int, (Long, Int, Seq[String] => List[::[Int]]))]] ]))
   }
 
 }
