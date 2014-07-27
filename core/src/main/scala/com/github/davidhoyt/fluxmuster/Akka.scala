@@ -141,7 +141,7 @@ object Akka {
 
     def receive: Receive = {
       case msg @ Initialize(prev, next) =>
-        log.info("Received initialization for {}: {}", metadata, msg)
+        log.debug("Received initialization for {}: {}", metadata, msg)
         downstreamRef = next
         upstreamRef = prev
         context.become(readyForProcessing)
@@ -152,7 +152,7 @@ object Akka {
 
     def readyForProcessing: Receive = {
       case msg @ Downstream(possibleRecipient, value: Try[A]) =>
-        log.info("Received downstream for {}: {}", metadata, msg)
+        log.debug("Received downstream for {}: {}", metadata, msg)
 
         //Get the sender here since Initialize() messages aren't
         //sent by the temporary actor created for completing the future.
@@ -169,7 +169,7 @@ object Akka {
         }
 
       case msg @ Upstream(recipient, value: Try[C]) =>
-        log.info("Received upstream for {}: {}", metadata, msg)
+        log.debug("Received upstream for {}: {}", metadata, msg)
         val response = value map step.upstream
 
         if (upstreamRef.isDefined)

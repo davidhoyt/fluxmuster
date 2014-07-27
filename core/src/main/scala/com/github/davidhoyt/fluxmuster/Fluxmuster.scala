@@ -68,7 +68,7 @@ object Fooz {
     })
 
     val step1 = LogIt1 <~> LogIt2 <~> LogIt3 <~> ((x: Int) => x + 0, (y: Long) => y)
-    val step2 = Project.upstreamValue[Int, Int, Long] <~> Cache[Int, Long] <~> KeyValueProcessor[Int, Int, Long] { k: Int => println(s"IN KVProcessor: $k"); k + 1L }
+    val step2 = Project.upstreamValue[Int, Int, Long] <~> Cache[Int, Long] <~> KeyValueProcessor[Int, Int, Long] { k: Int => /*println(s"IN KVProcessor: $k");*/ k + 1L }
     val step3 = step1 <~> step2
     val akkaize = Akka.par(AkkaConfiguration()) |> step3
     //val hystrixize = Hystrix(0L) |> step3
@@ -84,16 +84,18 @@ object Fooz {
   println(hys)
   println(hys.connections)
   println(Ehcache.availableCaches)
-  for(i <- 0 until 3) {
-    //val r = Await.result(hys(s"${i % 250}"), 2.seconds)
-    //println(s"$i: $r")
-    hys(s"${i % 250}") map { x =>
-      println(s"$i: $x")
-    }
-    //if (i % 50 == 0)
-    //  Thread.sleep(1)
-  }
-  Thread.sleep(10000)
+  val sequence = Future.sequence(
+    for(i <- Stream.from(0).take(50000))
+      //val r = Await.result(hys(s"${i % 250}"), 2.seconds)
+      //println(s"$i: $r")
+      yield hys(s"${i % 50}") map { x =>
+        println(s"$i: $x")
+      }
+      //if (i % 50 == 0)
+      //  Thread.sleep(1)
+    )
+  Await.result(sequence, 10.seconds)
+  println("ALL DONE")
   system.shutdown()
 //  //val h1: ProxyStep[String, String, String, String] =
 //  for (i <- Stream.from(0).take(1).par) {
