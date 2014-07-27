@@ -1,7 +1,7 @@
 package com.github.davidhoyt.fluxmuster
 
-class ProxySpecificationSpec extends UnitSpec {
-  behavior of "ProxySpecification"
+class ProxyStepSpec extends UnitSpec {
+  behavior of "ProxyStep"
 
   def stringToLong(x: String) = x.toLong
   def longToInt(x: Long) = x.toInt
@@ -9,7 +9,7 @@ class ProxySpecificationSpec extends UnitSpec {
   class Foo[A, B, C](value: A, b: B, c: C)
   type BlahBlah[A] = Foo[A, A, A]
 
-  it should "properly compose specification connections" in {
+  it should "properly compose step connections" in {
     val part0 = Identity[String, Int]("#0")
     val part1 = Identity[String, Int]("#1")
     val part2 = Downstream[String, Long, Int]("#2")(stringToLong)

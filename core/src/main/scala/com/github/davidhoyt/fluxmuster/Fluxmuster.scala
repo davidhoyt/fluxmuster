@@ -30,13 +30,13 @@ import Hystrix._
 import Proxy._
 
 //object Hystrix2 {
-//  def apply(): ProxySpecification[String, Int, Long, Long] =
-//    ProxySpecification("Hystrix")(Fooz.ps1.downstream, Fooz.ps1.upstream)
+//  def apply(): ProxyStep[String, Int, Long, Long] =
+//    ProxyStep("Hystrix")(Fooz.ps1.downstream, Fooz.ps1.upstream)
 //}
 //
 //object Cache {
-//  def apply(): ProxySpecification[Int, Long, Long, Long] =
-//    ProxySpecification("Cache")(Fooz.ps2.downstream, Fooz.ps2.upstream)
+//  def apply(): ProxyStep[Int, Long, Long, Long] =
+//    ProxyStep("Cache")(Fooz.ps2.downstream, Fooz.ps2.upstream)
 //}
 
 
@@ -74,10 +74,10 @@ object Fooz {
     //val hystrixize = Hystrix(0L) |> step3
 //    val z = Projection.upstream[Int, Int, Int] <~> Cache[Int, Int](inMemory) <~> KeyValueProcessor[Int, Int, Int] { k => println(s"IN KVProcessor: $k"); k + 1 }
 //    val o = Identity[Int, String] <~> ((x: Int) => x + 0, (y: Long) => y.toString) <~> Identity[Int, Long] <~> Projection.upstreamTuple2[Int, Int, Long] <~> Cache[Int, Long](inMemory) <~> KeyValueProcessor[Int, Int, Long] { k => println(s"IN KVProcessor: $k"); k + 1L }
-//    val fa: ProxySpecification[String, Future[Long], Future[Long], Future[Long]] =
+//    val fa: ProxyStep[String, Future[Long], Future[Long], Future[Long]] =
 //      Akka(AkkaConfiguration()) |> (LogIt1 <~> LogIt2 <~> LogIt3 <~> ((x: Int) => x + 0, (y: Long) => y) <~> Projection.upstreamTuple2[Int, Int, Long] <~> Cache[Int, Long](inMemory) <~> KeyValueProcessor[Int, Int, Long] { k => println(s"IN KVProcessor: $k"); k + 1L })
-//    val fb: ProxySpecification[String, Future[Future[Long]], Future[Future[Long]], Future[Future[Long]]] = (Hystrix(fallback = Future.successful(100L)) |> fa)
-//    val f: ProxySpecification[String, Future[Future[Long]], Future[Future[Long]], Future[Long]] = Join("") <~> fb
+//    val fb: ProxyStep[String, Future[Future[Long]], Future[Future[Long]], Future[Future[Long]]] = (Hystrix(fallback = Future.successful(100L)) |> fa)
+//    val f: ProxyStep[String, Future[Future[Long]], Future[Future[Long]], Future[Long]] = Join("") <~> fb
 //    f
     akkaize
   }
@@ -95,7 +95,7 @@ object Fooz {
   }
   Thread.sleep(10000)
   system.shutdown()
-//  //val h1: ProxySpecification[String, String, String, String] =
+//  //val h1: ProxyStep[String, String, String, String] =
 //  for (i <- Stream.from(0).take(1).par) {
 //    println(s"$i")
 //    try {
@@ -111,10 +111,10 @@ object Fooz {
 //  val a1: LinkDownstream[String, Int] = _.toInt
 //  val a2: LinkDownstream[Int, Long] = _.toLong + 1
 //  val upstream: LinkUpstream[Long, Long] = identity
-//  val ps1: ProxySpecification[String, Int, Long, Long] = ProxySpecification("to int")(a1, x => x + 10)
-//  val ps2: ProxySpecification[Int, Long, Long, Long] = ProxySpecification(a2, _ - 1)
-//  val proxySpec: ProxySpecification[String, Long, Long, Long] = ps1 connect ps2
-//  val proxy1 = Proxy(proxySpec)
+//  val ps1: ProxyStep[String, Int, Long, Long] = ProxyStep("to int")(a1, x => x + 10)
+//  val ps2: ProxyStep[Int, Long, Long, Long] = ProxyStep(a2, _ - 1)
+//  val proxyStep: ProxyStep[String, Long, Long, Long] = ps1 connect ps2
+//  val proxy1 = Proxy(proxyStep)
 //  //val proxy = Proxy(Proxy(Passthrough[String, String]()) <~> Proxy(Passthrough[String, String]() <~> Passthrough[String, String]()))
 }
 

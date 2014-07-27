@@ -34,8 +34,8 @@ object Hystrix {
 
     new ProxyLiftDownstreamWithHint[T, Future] {
       protected val name = NAME
-      protected def downstream[A, B, C](spec: ProxySpecification[A, B, B, C])(implicit evidence: T <:< C): LinkDownstream[A, Future[C]] =
-        construct[A, C](adjustedConfiguration)(ProxySpecification.run(spec)).apply(evidence(fallback))
+      protected def downstream[A, B, C](step: ProxyStep[A, B, B, C])(implicit evidence: T <:< C): LinkDownstream[A, Future[C]] =
+        construct[A, C](adjustedConfiguration)(ProxyStep.run(step)).apply(evidence(fallback))
     }
   }
 

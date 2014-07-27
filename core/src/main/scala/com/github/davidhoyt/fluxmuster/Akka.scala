@@ -12,7 +12,7 @@ object Akka {
 
   val NAME = Macros.simpleNameOf[Akka.type]
 
-  case class Run[A, B, C, D](value: A, specification: ProxySpecification[A, B, C, D])
+  case class Run[A, B, C, D](value: A, step: ProxyStep[A, B, C, D])
 
   case class Response[D](value: Try[D])
 
@@ -22,25 +22,25 @@ object Akka {
   def apply(configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLiftDownstreamWithHint[Nothing, Future] =
     new ProxyLiftDownstreamWithHint[Nothing, Future] {
       protected val name = NAME
-      protected def downstream[A, B, C](spec: ProxySpecification[A, B, B, C])(implicit evidence: Nothing <:< C): LinkDownstream[A, Future[C]] =
-        run(spec, configuration, timeout, executionContext, actorRefFactory) _
+      protected def downstream[A, B, C](step: ProxyStep[A, B, B, C])(implicit evidence: Nothing <:< C): LinkDownstream[A, Future[C]] =
+        run(step, configuration, timeout, executionContext, actorRefFactory) _
   }
 
   def par(configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLiftDownstreamWithHint[Nothing, Future] =
     new ProxyLiftDownstreamWithHint[Nothing, Future] {
       protected val name = NAME
-      protected def downstream[A, B, C](spec: ProxySpecification[A, B, B, C])(implicit evidence: Nothing <:< C): LinkDownstream[A, Future[C]] =
-        runParallel(spec, configuration, timeout, executionContext, actorRefFactory)
+      protected def downstream[A, B, C](step: ProxyStep[A, B, B, C])(implicit evidence: Nothing <:< C): LinkDownstream[A, Future[C]] =
+        runParallel(step, configuration, timeout, executionContext, actorRefFactory)
     }
 
-  private def run[A, B, C](specification: ProxySpecification[A, B, B, C], configuration: AkkaConfiguration, timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory)(a: A): Future[C] = {
+  private def run[A, B, C](step: ProxyStep[A, B, B, C], configuration: AkkaConfiguration, timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory)(a: A): Future[C] = {
     import akka.pattern.ask
 
     implicit val t = timeout
     implicit val ec = executionContext
 
     val actor = actorRefFactory.actorOf(Props[ProxyActor[A, B, C]])
-    val future = (actor ? Run[A, B, B, C](a, specification)) map { value =>
+    val future = (actor ? Run[A, B, B, C](a, step)) map { value =>
       value.asInstanceOf[Response[C]] match {
         case Response(Success(result)) =>
           result
@@ -60,11 +60,11 @@ object Akka {
 
   class ProxyActor[A, B, C] extends Actor with ActorLogging {
     def receive: Receive = {
-      case Run(value, specification) =>
+      case Run(value, step) =>
         val v = value.asInstanceOf[A]
-        val spec = specification.asInstanceOf[ProxySpecification[A, B, B, C]]
+        val s = step.asInstanceOf[ProxyStep[A, B, B, C]]
 
-        sender() ! Response(Try(ProxySpecification.run(spec)(v)))
+        sender() ! Response(Try(ProxyStep.run(s)(v)))
       case other =>
         log.warning("Unrecognized message: {}", other)
     }
@@ -74,7 +74,7 @@ object Akka {
   case class Downstream[A](recipient: Option[ActorRef], value: Try[A])
   case class Upstream[A](recipient: ActorRef, value: Try[A])
 
-  private def runParallel[A, B, C](specification: ProxySpecification[A, B, B, C], configuration: AkkaConfiguration, timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): A => Future[C] = {
+  private def runParallel[A, B, C](step: ProxyStep[A, B, B, C], configuration: AkkaConfiguration, timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): A => Future[C] = {
     import akka.pattern.ask
 
     implicit val t = timeout
@@ -84,10 +84,10 @@ object Akka {
 
     //Create the actors.
     val actorRefs =
-      for (spec <- specification.connections)
+      for (singleStep <- step.connections)
       yield {
-        val meta = spec.metadata.head
-        actorRefFactory.actorOf(Props(new ParallelProxyActor(meta, spec, meta.typeAcceptDownstream, meta.typeMappedDownstream, meta.typeAcceptUpstream, meta.typeMappedUpstream)))
+        val meta = singleStep.metadata.head
+        actorRefFactory.actorOf(Props(new ParallelProxyActor(meta, singleStep, meta.typeAcceptDownstream, meta.typeMappedDownstream, meta.typeAcceptUpstream, meta.typeMappedUpstream)))
       }
 
     //Link them together.
@@ -117,12 +117,12 @@ object Akka {
     }
   }
 
-  class ParallelProxyActor[A, B, C, D](metadata: Metadata, provided: ProxySpecification[_, _, _, _], tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D]) extends Actor with ActorLogging {
+  class ParallelProxyActor[A, B, C, D](metadata: Metadata, provided: ProxyStep[_, _, _, _], tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D]) extends Actor with ActorLogging {
     import akka.actor.SupervisorStrategy._
     import scala.util.control.NonFatal
 
-    val spec =
-      provided.asInstanceOf[ProxySpecification[A, B, C, D]]
+    val step =
+      provided.asInstanceOf[ProxyStep[A, B, C, D]]
 
     var downstreamRef: Option[ActorRef] =
       None
@@ -157,7 +157,7 @@ object Akka {
         //Get the sender here since Initialize() messages aren't
         //sent by the temporary actor created for completing the future.
         val recipient = possibleRecipient orElse Some(sender())
-        val result = value map spec.downstream
+        val result = value map step.downstream
 
         if (downstreamRef.isDefined) {
           val downstream = downstreamRef.get
@@ -170,7 +170,7 @@ object Akka {
 
       case msg @ Upstream(recipient, value: Try[C]) =>
         log.info("Received upstream for {}: {}", metadata, msg)
-        val response = value map spec.upstream
+        val response = value map step.upstream
 
         if (upstreamRef.isDefined)
           upstreamRef.get ! Upstream(recipient, response)

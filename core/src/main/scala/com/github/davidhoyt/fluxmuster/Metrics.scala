@@ -3,7 +3,7 @@ package com.github.davidhoyt.fluxmuster
 import com.codahale.metrics.MetricRegistry
 
 //this won't do -- need separate Timer(), Counter(), etc.
-//where each is a ProxySpecification
+//where each is a ProxyStep
 
 trait MetricsOps {
   def counter(name: String): CounterMetric
