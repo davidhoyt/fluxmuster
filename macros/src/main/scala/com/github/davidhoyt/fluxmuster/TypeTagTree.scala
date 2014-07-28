@@ -54,7 +54,7 @@ object TypeTagTreeNode {
     //that changes how their type arguments are accessed.
     t match {
       //Anonymous type such as "new Foo[String] {}"
-      case RefinedType(TypeRef(_, anyRefSymbol, _) :: typeRefs, _) if anyRefSymbol.fullName == "scala.AnyRef" =>
+      case RefinedType((possiblyAnyRef @ TypeRef(_, _, _)) :: typeRefs, _) if possiblyAnyRef =:= typeOf[AnyRef] =>
         process(typeRefs)
 
       //Refined type such as "Foo with Bar with Baz"

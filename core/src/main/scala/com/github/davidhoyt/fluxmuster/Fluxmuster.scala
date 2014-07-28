@@ -67,7 +67,7 @@ object Fooz {
       x * 1
     })
 
-    val step1 = LogIt1 <~> LogIt2 <~> LogIt3 <~> ((x: Int) => x + 0, (y: Long) => y)
+    val step1 = LogIt1 <~> LogIt2 <~> LogIt3 <~> ((x: Int) => { x + 0 }, (y: Long) => { y })
     val step2 = Project.upstreamValue[Int, Int, Long] <~> Cache[Int, Long] <~> KeyValueProcessor[Int, Int, Long] { k: Int => /*println(s"IN KVProcessor: $k");*/ k + 1L }
     val step3 = step1 <~> step2
     val akkaize = Akka.par(AkkaConfiguration()) |> step3
