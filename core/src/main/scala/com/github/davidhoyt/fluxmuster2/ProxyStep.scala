@@ -1,8 +1,9 @@
 package com.github.davidhoyt.fluxmuster2
 
+import com.github.davidhoyt.fluxmuster.TypeTagTree
+
 import scala.annotation.implicitNotFound
 import scala.collection._
-import com.github.davidhoyt.fluxmuster._
 
 trait Runner[A, B, C, D] {
   val downstream: LinkDownstream[A, B]
@@ -142,25 +143,9 @@ sealed trait LiftedAndFlatten[A, D, S, F[_]] extends LiftLike[S, F] with StepLik
   implicit lazy val typeMappedDownstream = typeMappedUpstream
   implicit lazy val typeAcceptUpstream = typeMappedUpstream
 
-  def lift[U, V, W, G[_]](other: Lifted[A, U, V, G[D], W, G])(implicit e1: U <:< V, converter: G -> F): LiftedAndFlatten[A, D, S, F] = {
-    val down: LinkDownstream[A, F[D]] = {
-      (a: A) => {
-        val runOtherInThisContext: A => F[G[D]] = op.apply(other.run)(state)
-        val resultAfterRunning: F[G[D]] = runOtherInThisContext(a)
-
-        //flatMap!
-        val mapResultBackIntoThisContext = op.map(resultAfterRunning)(converter.apply)(state)
-        val flattenedBackIntoThisContext: F[D] = op.flatten(mapResultBackIntoThisContext)(state)
-        flattenedBackIntoThisContext
-      }
-    }
-    LiftedAndFlatten(down, state, op)(typeAcceptDownstream, typeMappedUpstream, typeState)
-  }
-
-  def lift[U, V, W, G[_]](other: LiftedAndFlatten[A, D, W, G])(implicit converter: G -> F): LiftedAndFlatten[A, D, S, F] = {
-
-    val down: LinkDownstream[A, F[D]] = (a: A) => {
-      val runOtherInThisContext: A => F[G[D]] = op.apply(other.run)(state)
+  private def runInThisContext[G[_]](runner: A => G[D])(implicit converter: G -> F): LinkDownstream[A, F[D]] =
+    (a: A) => {
+      val runOtherInThisContext: A => F[G[D]] = op.apply(runner)(state)
       val resultAfterRunning: F[G[D]] = runOtherInThisContext(a)
 
       //flatMap!
@@ -169,8 +154,11 @@ sealed trait LiftedAndFlatten[A, D, S, F[_]] extends LiftLike[S, F] with StepLik
       flattenedBackIntoThisContext
     }
 
-    LiftedAndFlatten[A, D, S, F](down, state, op)(typeAcceptDownstream, typeMappedUpstream, typeState)
-  }
+  def lift[U, V, W, G[_]](other: Lifted[A, U, V, G[D], W, G])(implicit e1: U <:< V, converter: G -> F): LiftedAndFlatten[A, D, S, F] =
+    LiftedAndFlatten[A, D, S, F](runInThisContext(other.run), state, op)(typeAcceptDownstream, typeMappedUpstream, typeState)
+
+  def lift[U, V, W, G[_]](other: LiftedAndFlatten[A, D, W, G])(implicit converter: G -> F): LiftedAndFlatten[A, D, S, F] =
+    LiftedAndFlatten[A, D, S, F](runInThisContext(other.run), state, op)(typeAcceptDownstream, typeMappedUpstream, typeState)
 }
 
 object LiftedAndFlatten {
@@ -181,12 +169,11 @@ object LiftedAndFlatten {
 }
 
 trait Lifted[A, B, C, D, S, F[_]] extends LiftLike[S, F] with StepLike[A, B, C, D] with Runner[A, B, C, D] {
-  val name = "?????"
+  val name = "|>"
 
   def lift[T, U](other: Step[A, T, U, D])(implicit tFofT: TypeTagTree[F[T]], tFofD: TypeTagTree[F[D]]): Lifted[A, T, U, D, S, F] =
     Lifted(other, state, op)
 
-  //flatten?
   def lift[U, V, W, G[_]](other: Lifted[A, U, V, D, W, G])(implicit e1: U <:< V, e2: G[_] <:< F[_], tFofD: TypeTagTree[F[D]], tFofFofD: TypeTagTree[F[F[D]]]): LiftedAndFlatten[A, D, S, F] = {
 //    val appliedLiftOp = new LiftOp[S, F] {
 //      def apply[A1, D1](state: S)(runner: (A1) => D1): (A1) => F[D1] = {
