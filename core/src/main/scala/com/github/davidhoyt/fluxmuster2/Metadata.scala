@@ -1,6 +1,8 @@
-package com.github.davidhoyt.fluxmuster
+package com.github.davidhoyt.fluxmuster2
 
 import scala.collection._
+
+import com.github.davidhoyt.fluxmuster.TypeTagTree
 
 trait Metadata {
   val name: String
@@ -42,6 +44,6 @@ object Metadata {
     }
 
   //TODO: Remove "lifted" from this signature and everywhere else it's used
-  def apply(name: String, typeAcceptDownstream: TypeTagTree[_], typeMappedDownstream: TypeTagTree[_], typeAcceptUpstream: TypeTagTree[_], typeMappedUpstream: TypeTagTree[_], lifted: Boolean = false, metadata: immutable.Seq[Metadata] = immutable.Seq(), asString: String = null): Metadata =
+  def apply(name: String, typeAcceptDownstream: TypeTagTree[_], typeMappedDownstream: TypeTagTree[_], typeAcceptUpstream: TypeTagTree[_], typeMappedUpstream: TypeTagTree[_], metadata: immutable.Seq[Metadata] = immutable.Seq(), asString: String = null): Metadata =
     Meta(name, typeAcceptDownstream, typeMappedDownstream, typeAcceptUpstream, typeMappedUpstream, metadata, asString)
 }

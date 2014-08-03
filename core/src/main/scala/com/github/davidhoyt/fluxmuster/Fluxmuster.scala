@@ -70,7 +70,17 @@ object Fooz {
     val step1 = LogIt1 <~> LogIt2 <~> LogIt3 <~> ((x: Int) => { x + 0 }, (y: Long) => { y })
     val step2 = Project.upstreamValue[Int, Int, Long] <~> Cache[Int, Long] <~> KeyValueProcessor[Int, Int, Long] { k: Int => /*println(s"IN KVProcessor: $k");*/ k + 1L }
     val step3 = step1 <~> step2
-    val akkaize = Akka.par(AkkaConfiguration()) |> step3
+
+    //problem is that lifting is flattening! :/
+
+    val hystrixize: ProxyStep[String, Future[Long], Future[Long], Future[Long]] =
+      Hystrix(0L) |> step3
+
+    val akkaize = //: ProxyStep[String, Future[Long], Future[Long], Future[Long]] =
+      Akka.par(AkkaConfiguration()) blah hystrixize
+
+      //(Akka.par(AkkaConfiguration()) |> (Hystrix(0L) |> step3))
+
     //val hystrixize = Hystrix(0L) |> step3
 //    val z = Projection.upstream[Int, Int, Int] <~> Cache[Int, Int](inMemory) <~> KeyValueProcessor[Int, Int, Int] { k => println(s"IN KVProcessor: $k"); k + 1 }
 //    val o = Identity[Int, String] <~> ((x: Int) => x + 0, (y: Long) => y.toString) <~> Identity[Int, Long] <~> Projection.upstreamTuple2[Int, Int, Long] <~> Cache[Int, Long](inMemory) <~> KeyValueProcessor[Int, Int, Long] { k => println(s"IN KVProcessor: $k"); k + 1L }
@@ -85,7 +95,7 @@ object Fooz {
   println(hys.connections)
   println(Ehcache.availableCaches)
   val sequence = Future.sequence(
-    for(i <- Stream.from(0).take(50000))
+    for(i <- Stream.from(0).take(1))
       //val r = Await.result(hys(s"${i % 250}"), 2.seconds)
       //println(s"$i: $r")
       yield hys(s"${i % 50}") map { x =>

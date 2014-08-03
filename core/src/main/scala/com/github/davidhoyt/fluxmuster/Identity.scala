@@ -7,5 +7,5 @@ object Identity {
     apply(NAME)(tA, tB)
 
   def apply[A, B](name: String)(implicit tA: TypeTagTree[A], tB: TypeTagTree[B]): ProxyStep[A, A, B, B] =
-    ProxyStep(Metadata(name, tA, tA, tB, tB, s"$name[${tA.toShortString}, ${tB.toShortString}]"))(identity, identity)
+    ProxyStep(Metadata(name, tA, tA, tB, tB, lifted = false, asString = s"$name[${tA.toShortString}, ${tB.toShortString}]"))(identity, identity)
 }

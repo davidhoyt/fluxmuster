@@ -49,6 +49,30 @@ package object fluxmuster {
       proxy(p2)
   }
 
+  import scala.concurrent._
+
+  implicit def toFuture[A](a: A): Future[A] =
+    Future.successful(a)
+
+  implicit def flattenFuture[A](f: Future[Future[A]])(implicit ec: ExecutionContext): Future[A] = {
+    import scala.util._
+    val p = Promise[A]()
+    f.onComplete {
+      case Success(next) =>
+        p.completeWith(next)
+      case Failure(t) =>
+        p.failure(t)
+    }
+    p.future
+  }
+
+//  trait Foo2[F[_]] {
+//    def test[A, B, C](step: ProxyStep[A, B, B, C])(implicit flatten: F[F[C]] => F[C])
+//    def |>[A, C](step: ProxyStep[A, F[C], F[C], F[C]])(implicit flatten: F[F[C]] => F[C]): ProxyStep[A, F[C], F[C], F[C]] = {
+//      step.
+//    }
+//  }
+
   /**
    * Intended for use by [[ProxyLift]] implementers to aid the compiler in
    * capturing type information that may not be normally easily accessible
@@ -59,18 +83,46 @@ package object fluxmuster {
    * @tparam F A type constructor that implementers will lift types into
    */
   trait ProxyLiftDownstreamWithHint[T, F[_]] {
-    protected def name: String
-    protected def downstream[A, B, C](p2: ProxyStep[A, B, B, C])(implicit evidence: T <:< C): LinkDownstream[A, F[C]]
+    def name: String
+    def downstream[A, B, C](step: ProxyStep[A, B, B, C])(implicit convert: T => C, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C]): LinkDownstream[A, F[C]]
+    def downstream2[A, C](step: ProxyStep[A, F[C], F[C], F[C]])(implicit convert: T => F[C]): LinkDownstream[A, F[F[C]]] =
+      ???
 
-    def |>[A, B, C](step: ProxyStep[A, B, B, C])(implicit evidence: T <:< C, tA: TypeTagTree[A], tC: TypeTagTree[F[C]]): ProxyStep[A, F[C], F[C], F[C]] =
+    //def |>[A, C](step: ProxyStep[A, F[C], F[C], F[C]])(implicit point: T => F[C], flatten: F[F[C]] => F[C], tA: TypeTagTree[A], tFofC: TypeTagTree[F[C]]): ProxyStep[A, F[C], F[C], F[C]] =
+    //  lift(step)(point, flatten, tA, tFofC)
+
+    def blah[A, C](step: ProxyStep[A, F[C], F[C], F[C]])(implicit flatten: F[F[C]] => F[C], evidence: T <:< F[C], tA: TypeTagTree[A], tC: TypeTagTree[C], tFofC: TypeTagTree[F[C]], tFofFofC: TypeTagTree[F[F[C]]]) = {//: ProxyStep[A, F[C], F[C], F[C]] = {
+////      val liftedName = name
+////
+////      val down1: LinkDownstream[T, F[C]] = (t: T) => point(huh(t))
+////      val up1: LinkUpstream[A, F[]
+////      val fn = (t: T) => huh(t)
+////      val
+////
+////
+//      val liftedName = name
+//      val liftedDownstream: LinkDownstream[A, F[F[C]]] = downstream2(step)
+//      val liftedUpstream: LinkUpstream[F[F[C]], F[C]] = flatten
+////      //val foo = (a: A) => { flatten(liftedDownstream(a)) }
+////      val liftedUpstream: LinkUpstream[F[F[C]], F[C]] = flatten // identity // flatten //identity[F[F[C]]]
+////      val s = ProxyStep(Metadata("FOO", tA, tA, tA, tA, lifted = false, asString = s"???") +: step.metadata, liftedDownstream, liftedUpstream, step.connections)
+//      ProxyStep(Metadata(liftedName, tA, tFofC, tFofC, tFofC, lifted = true, asString = s"$liftedName[${tA.toShortString}, ${tFofC.toShortString}]") +: step.metadata, liftedDownstream, liftedUpstream, immutable.Seq(step))
+      val liftedName = name
+      //val f: ProxyStep[A, F[F[C]], F[F[C]], F[F[C]]] = lift[A, F[C], F[C]](step)
+      val s: ProxyStep[A, F[C], F[C], F[C]] = ProxyStep(immutable.Seq(Metadata(liftedName, tA, tFofC, tFofC, tFofC, metadata = step.metadata)), downstream(step) andThen flatten, identity, immutable.Seq(step))
+      //val c: ProxyStep[A, F[F[C]], F[F[C]], F[C]] = ProxyStep.combine(f, Upstream[A, F[F[C]], F[C]](flatten))
+      s
+    }
+
+    def |>[A, B, C](step: ProxyStep[A, B, B, C])(implicit evidence: T <:< C, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tFofC: TypeTagTree[F[C]]): ProxyStep[A, F[C], F[C], F[C]] =
       lift(step)
 
-    def lift[A, B, C](step: ProxyStep[A, B, B, C])(implicit evidence: T <:< C, tA: TypeTagTree[A], tC: TypeTagTree[F[C]]): ProxyStep[A, F[C], F[C], F[C]] = {
+    def lift[A, B, C](step: ProxyStep[A, B, B, C])(implicit evidence: T <:< C, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tFofC: TypeTagTree[F[C]]): ProxyStep[A, F[C], F[C], F[C]] = {
       val liftedName = name
       val liftedUpstream = identity[F[C]] _
       val liftedDownstream = downstream(step)
 
-      ProxyStep(Metadata(liftedName, tA, tC, tC, tC, s"$liftedName[${tA.toShortString}, ${tC.toShortString}]") +: step.metadata, liftedDownstream, liftedUpstream, step.connections)
+      ProxyStep(immutable.Seq(Metadata(liftedName, tA, tC, tC, tC, metadata = step.metadata, lifted = true, asString = s"$liftedName[${tA.toShortString}, ${tC.toShortString}]")), liftedDownstream, liftedUpstream, immutable.Seq(step))
     }
   }
 
@@ -130,21 +182,39 @@ package object fluxmuster {
     }
   }
 
-  implicit class ProxyStepBiDirectionalEnhancements[A, B, C, D](val step: ProxyStep[A, B, C, D])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C]) {
-    def <~[E](onUpstream: LinkUpstream[E, C])(implicit tE: TypeTagTree[E]): ProxyStep[A, B, E, D] =
+  implicit class ProxyStepBiDirectionalEnhancements[A, B, C, D](val step: ProxyStep[A, B, C, D]) extends AnyVal {
+    def <~[E](onUpstream: LinkUpstream[E, C])(implicit tB: TypeTagTree[B], tC: TypeTagTree[C], tE: TypeTagTree[E]): ProxyStep[A, B, E, D] =
       step connect Upstream[B, E, C](onUpstream)(tB, tE, tC)
 
-    def ~>[E](onDownstream: LinkDownstream[B, E])(implicit tE: TypeTagTree[E]): ProxyStep[A, E, C, D] =
+    def ~>[E](onDownstream: LinkDownstream[B, E])(implicit tB: TypeTagTree[B], tC: TypeTagTree[C], tE: TypeTagTree[E]): ProxyStep[A, E, C, D] =
       step connect Downstream[B, E, C](onDownstream)(tB, tE, tC)
+  }
+
+  implicit class ProxyStepLiftEnhancements[A, C, F[_]](val step: ProxyStep[A, F[C], F[C], F[C]]) extends AnyVal {
+    def |>[T](liftWithHint: ProxyLiftDownstreamWithHint[T, F])(implicit point: T => F[C], flatten: F[F[C]] => F[C], tA: TypeTagTree[A], tFofFofC: TypeTagTree[F[F[C]]], tFofC: TypeTagTree[F[C]]): ProxyStep[A, F[F[C]], F[F[C]], F[C]] =
+      lift(liftWithHint)(point, flatten, tA, tFofFofC, tFofC)
+
+    def lift[T](liftWithHint: ProxyLiftDownstreamWithHint[T, F])(implicit point: T => F[C], flatten: F[F[C]] => F[C], tA: TypeTagTree[A], tFofFofC: TypeTagTree[F[F[C]]], tFofC: TypeTagTree[F[C]]): ProxyStep[A, F[F[C]], F[F[C]], F[C]] = {
+      val liftedName = liftWithHint.name
+      val liftedDownstream: LinkDownstream[A, F[F[C]]] = liftWithHint.downstream(step)(point, tA, tFofC, tFofC)
+      val liftedUpstream: LinkUpstream[F[F[C]], F[C]] = flatten
+      ProxyStep(immutable.Seq(Metadata(liftedName, tA, tFofFofC, tFofFofC, tFofC, metadata = step.metadata, lifted = true, asString = s"$liftedName[${tA.toShortString}, ${tFofC.toShortString}]")), liftedDownstream, liftedUpstream, immutable.Seq(step))
+    }
   }
 
   implicit class ConnectedMetadataEnhancements(val connectedMetadata: ConnectedMetadata) extends AnyVal {
     def toShortString = {
       val sb = StringBuilder.newBuilder
+      var last: Metadata = null
       for ((meta, idx) <- connectedMetadata.zipWithIndex) {
-        if (idx > 0)
-          sb ++= ", "
+        if (idx > 0) {
+          if (meta.lifted || last.lifted)
+            sb ++= " |> "
+          else
+            sb ++= " <~> "
+        }
         sb ++= meta.toShortString
+        last = meta
       }
       sb.toString()
     }

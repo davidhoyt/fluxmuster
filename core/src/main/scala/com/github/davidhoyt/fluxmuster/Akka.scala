@@ -16,24 +16,28 @@ object Akka {
 
   case class Response[D](value: Try[D])
 
-  def apply(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLiftDownstreamWithHint[Nothing, Future] =
+  def apply[T](implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLiftDownstreamWithHint[T, Future] =
     apply(AkkaConfiguration())
 
-  def apply(configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLiftDownstreamWithHint[Nothing, Future] =
-    new ProxyLiftDownstreamWithHint[Nothing, Future] {
-      protected val name = NAME
-      protected def downstream[A, B, C](step: ProxyStep[A, B, B, C])(implicit evidence: Nothing <:< C): LinkDownstream[A, Future[C]] =
-        run(step, configuration, timeout, executionContext, actorRefFactory) _
-  }
+  def apply[T](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLiftDownstreamWithHint[T, Future] =
+    new ProxyLiftDownstreamWithHint[T, Future] {
+      val name = NAME
+      def downstream[A, B, C](step: ProxyStep[A, B, B, C])(implicit convert: T => C, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C]): LinkDownstream[A, Future[C]] =
+        run(step, configuration, timeout, executionContext, actorRefFactory, tA, tB, tC)
 
-  def par(configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLiftDownstreamWithHint[Nothing, Future] =
-    new ProxyLiftDownstreamWithHint[Nothing, Future] {
-      protected val name = NAME
-      protected def downstream[A, B, C](step: ProxyStep[A, B, B, C])(implicit evidence: Nothing <:< C): LinkDownstream[A, Future[C]] =
-        runParallel(step, configuration, timeout, executionContext, actorRefFactory)
     }
 
-  private def run[A, B, C](step: ProxyStep[A, B, B, C], configuration: AkkaConfiguration, timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory)(a: A): Future[C] = {
+  def par[T](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLiftDownstreamWithHint[T, Future] =
+    new ProxyLiftDownstreamWithHint[T, Future] {
+      val name = NAME
+      def downstream[A, B, C](step: ProxyStep[A, B, B, C])(implicit convert: T => C, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C]): LinkDownstream[A, Future[C]] =
+        runParallel(step, configuration, timeout, executionContext, actorRefFactory, tA, tB, tC)
+      //override def downstream2[A, C](step: ProxyStep[A, Future[C], Future[C], Future[C]])(implicit convert: T => Future[C]): LinkDownstream[A, Future[Future[C]]] = {
+      //  runParallel[A, Future[C], Future[C]](step, configuration, timeout, executionContext, actorRefFactory)
+      //}
+    }
+
+  private def run[A, B, C](step: ProxyStep[A, B, B, C], configuration: AkkaConfiguration, timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C])(a: A): Future[C] = {
     import akka.pattern.ask
 
     implicit val t = timeout
@@ -74,13 +78,10 @@ object Akka {
   case class Downstream[A](recipient: Option[ActorRef], value: Try[A])
   case class Upstream[A](recipient: ActorRef, value: Try[A])
 
-  private def runParallel[A, B, C](step: ProxyStep[A, B, B, C], configuration: AkkaConfiguration, timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): A => Future[C] = {
+  private def runParallel[A, B, C](implicit step: ProxyStep[A, B, B, C], configuration: AkkaConfiguration, timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C]): A => Future[C] = {
     import akka.pattern.ask
 
-    implicit val t = timeout
-    implicit val ec = executionContext
-
-    //TODO: Needs a parent actor.
+    //TODO: Needs a parent actor? Perhaps not since the ActorRefFactory can be the parent actor's context?
 
     //Create the actors.
     val actorRefs =
@@ -152,7 +153,7 @@ object Akka {
 
     def readyForProcessing: Receive = {
       case msg @ Downstream(possibleRecipient, value: Try[A]) =>
-        log.debug("Received downstream for {}: {}", metadata, msg)
+        log.info("Received downstream for {}: {}", metadata, msg)
 
         //Get the sender here since Initialize() messages aren't
         //sent by the temporary actor created for completing the future.
@@ -162,10 +163,12 @@ object Akka {
         if (downstreamRef.isDefined) {
           val downstream = downstreamRef.get
           downstream ! Downstream(recipient, result)
-        } else {
+        } else if (upstreamRef.isDefined) {
           //Nothing to do but ship it on back.
           upstreamRef map (_ ! Upstream(recipient.get, result))
           //context.stop(self)
+        } else {
+          self ! Upstream(recipient.get, result)
         }
 
       case msg @ Upstream(recipient, value: Try[C]) =>

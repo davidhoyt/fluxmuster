@@ -19,6 +19,8 @@ sealed case class TypeTagTreeNode[T](source: TypeTagTreeSource, tpe: Type) exten
 }
 
 object TypeTagTreeNode {
+  private val AnyRefType = typeOf[AnyRef]
+
   /** Constructs a new instance of [[TypeTagTree]] given the source. */
   def apply[T](source: TypeTagTreeSource)(implicit tag: TypeTag[T]): TypeTagTree[T] =
     TypeTagTreeNode(source, tag.tpe)
@@ -54,7 +56,7 @@ object TypeTagTreeNode {
     //that changes how their type arguments are accessed.
     t match {
       //Anonymous type such as "new Foo[String] {}"
-      case RefinedType((possiblyAnyRef @ TypeRef(_, _, _)) :: typeRefs, _) if possiblyAnyRef =:= typeOf[AnyRef] =>
+      case RefinedType((possiblyAnyRef @ TypeRef(_, _, _)) :: typeRefs, _) if possiblyAnyRef =:= AnyRefType =>
         process(typeRefs)
 
       //Refined type such as "Foo with Bar with Baz"

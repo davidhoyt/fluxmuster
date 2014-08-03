@@ -8,7 +8,11 @@ trait ProxyStep[-TAcceptDownstream, +TMappedDownstream, -TAcceptUpstream, +TMapp
   val upstream: LinkUpstream[TAcceptUpstream, TMappedUpstream]
   val connections: immutable.Seq[ProxyStep[_, _, _, _]]
 
-  override def toString = s"ProxyStep(${metadata.mkString(" <~> ")})"
+  override def toString =
+    metadata
+      .headOption
+      .map(mine => s"ProxyStep[${mine.typeAcceptDownstream.toShortString}, ${mine.typeMappedUpstream.toShortString}](${metadata.toShortString})")
+      .getOrElse(s"ProxyStep[?, ?](${metadata.toShortString})")
 }
 
 object ProxyStep {
@@ -60,6 +64,13 @@ object ProxyStep {
       (connections1 ++ connections2).foldLeft(immutable.Seq[ProxyStep[_, _, _, _]]()) {
         case (seq, ProxyStep(_, _, _, Seq(conn))) =>
           seq :+ conn
+        case (seq, _) =>
+          seq
+      }
+    val metadata: immutable.Seq[Metadata] =
+      (metadata1 ++ metadata2).foldLeft(immutable.Seq[Metadata]()) {
+        case (seq, Metadata(_, _, _, _, _, _, Seq(meta))) =>
+          seq :+ meta
         case (seq, _) =>
           seq
       }

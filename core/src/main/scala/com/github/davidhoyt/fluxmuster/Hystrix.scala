@@ -33,9 +33,9 @@ object Hystrix {
     val adjustedConfiguration = configuration.copy(timeout = timeout.duration)
 
     new ProxyLiftDownstreamWithHint[T, Future] {
-      protected val name = NAME
-      protected def downstream[A, B, C](step: ProxyStep[A, B, B, C])(implicit evidence: T <:< C): LinkDownstream[A, Future[C]] =
-        construct[A, C](adjustedConfiguration)(ProxyStep.run(step)).apply(evidence(fallback))
+      val name = NAME
+      def downstream[A, B, C](step: ProxyStep[A, B, B, C])(implicit convert: T => C, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C]): LinkDownstream[A, Future[C]] =
+        construct[A, C](adjustedConfiguration)(ProxyStep.run(step)).apply(fallback)
     }
   }
 
@@ -60,8 +60,10 @@ object Hystrix {
 
       (param: A) => {
         val cmd = new HystrixCommand[B](setter) {
-          override def run() =
+          override def run() = {
+            println("Running in hystrix")
             fn(param)
+          }
 
           override def getFallback =
             fallback

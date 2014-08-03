@@ -9,7 +9,7 @@ extends ProxyStep[TAcceptDownstream, TMappedDownstream, TAcceptUpstream, TMapped
   lazy val connections = step.connections
 
   override def toString =
-    s"Proxy(${metadata.mkString(" <~> ")})"
+    s"Proxy(${metadata.toShortString})"
 
   val metadata: ConnectedMetadata
   val step: ProxyStep[TAcceptDownstream, TMappedDownstream, TAcceptUpstream, TMappedUpstream]

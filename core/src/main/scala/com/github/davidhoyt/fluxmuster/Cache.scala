@@ -63,6 +63,7 @@ object Cache {
     val downstream: LinkDownstream[A, Downstream[A, K, V]] = lookup
     val upstream: LinkUpstream[Upstream[A, K, V], (A, V)] = store
     val connections = immutable.Seq(this)
+    val lifted = false
 
     private def lookup(given: A): Downstream[A, K, V] = {
       val key = keyExtractor(given)
