@@ -9,13 +9,12 @@ import com.github.davidhoyt.fluxmuster2._
 case class AkkaConfiguration(name: String = Macros.nameOf[Akka.type])
 
 object Akka {
-
   import scala.concurrent.{Future, ExecutionContext}
   import scala.util.{Try, Success, Failure}
 
   val NAME = Macros.simpleNameOf[Akka.type]
 
-  case class Run[A, B, C, D](value: A, step: Step[A, B, C, D])
+  case class Run[A, D](value: A, runner: A => D)
 
   case class Response[D](value: Try[D])
 
@@ -26,76 +25,67 @@ object Akka {
 
   def apply[T](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): LiftedNeedsStep[State, Future] =
     LiftedNeedsStep(NAME, State(configuration), AkkaSerialOps)
-//    new [T, Future] {
-//      val name = NAME
-//      def downstream[A, B, C](step: ProxyStep[A, B, B, C])(implicit convert: T => C, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C]): LinkDownstream[A, Future[C]] =
-//        run(step, configuration, timeout, executionContext, actorRefFactory, tA, tB, tC)
-//
-//    }
 
   def par[T](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): LiftedNeedsStep[State, Future] =
     LiftedNeedsStep(NAME, State(configuration), AkkaParallelOps)
-//    new ProxyLiftDownstreamWithHint[T, Future] {
-//      val name = NAME
-//      def downstream[A, B, C](step: ProxyStep[A, B, B, C])(implicit convert: T => C, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C]): LinkDownstream[A, Future[C]] =
-//        runParallel(step, configuration, timeout, executionContext, actorRefFactory, tA, tB, tC)
-//      //override def downstream2[A, C](step: ProxyStep[A, Future[C], Future[C], Future[C]])(implicit convert: T => Future[C]): LinkDownstream[A, Future[Future[C]]] = {
-//      //  runParallel[A, Future[C], Future[C]](step, configuration, timeout, executionContext, actorRefFactory)
-//      //}
-//    }
 
   object AkkaSerialOps extends LiftOp[State, Future] {
-    override implicit def apply[A, D](runner: (A) => D)(implicit state: State): (A) => Future[D] = ???
+    implicit def flatten[A](given: Future[Future[A]])(implicit state: State): Future[A] =
+      FutureLiftOp.flatten(given)(state.context)
 
-    override implicit def flatten[A](given: Future[Future[A]])(implicit state: State): Future[A] = ???
+    implicit def map[A, B](given: Future[A])(fn: A => B)(implicit state: State): Future[B] =
+      FutureLiftOp.map(given)(fn)(state.context)
 
-    override implicit def map[A, B](given: Future[A])(fn: (A) => B)(implicit state: State): Future[B] = ???
+    implicit def apply[A, D](runner: A => D)(implicit state: State, connections: Connections): (A) => Future[D] =
+      run(runner, state)
   }
 
   object AkkaParallelOps extends LiftOp[State, Future] {
-    override implicit def apply[A, D](runner: (A) => D)(implicit state: State): (A) => Future[D] = ???
+    implicit def flatten[A](given: Future[Future[A]])(implicit state: State): Future[A] =
+      FutureLiftOp.flatten(given)(state.context)
 
-    override implicit def flatten[A](given: Future[Future[A]])(implicit state: State): Future[A] = ???
+    implicit def map[A, B](given: Future[A])(fn: A => B)(implicit state: State): Future[B] =
+      FutureLiftOp.map(given)(fn)(state.context)
 
-    override implicit def map[A, B](given: Future[A])(fn: (A) => B)(implicit state: State): Future[B] = ???
+    implicit def apply[A, D](runner: A => D)(implicit state: State, connections: Connections): (A) => Future[D] =
+      ???
   }
 
-//  private def run[A, B, C](step: ProxyStep[A, B, B, C], configuration: AkkaConfiguration, timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C])(a: A): Future[C] = {
-//    import akka.pattern.ask
-//
-//    implicit val t = timeout
-//    implicit val ec = executionContext
-//
-//    val actor = actorRefFactory.actorOf(Props[ProxyActor[A, B, C]])
-//    val future = (actor ? Run[A, B, B, C](a, step)) map { value =>
-//      value.asInstanceOf[Response[C]] match {
-//        case Response(Success(result)) =>
-//          result
-//        case Response(Failure(err)) =>
-//          throw err
-//      }
-//    }
-//
-//    future.onComplete { _ =>
-//      actorRefFactory.stop(actor)
-//    }
-//
-//    future
-//  }
-//
-//  object ProxyActor
-//
-//  class ProxyActor[A, B, C] extends Actor with ActorLogging {
-//    def receive: Receive = {
-//      case Run(value, step) =>
-//        val v = value.asInstanceOf[A]
-//        val s = step.asInstanceOf[ProxyStep[A, B, B, C]]
-//
-//        sender() ! Response(Try(ProxyStep.run(s)(v)))
-//      case other =>
-//        log.warning("Unrecognized message: {}", other)
-//    }
-//  }
+  private def run[A, D](runner: A => D, state: State)(a: A): Future[D] = {
+    import akka.pattern.ask
+
+    import state._
+
+    val actor = actorRefFactory.actorOf(Props[RunnerActor[A, D]])
+    val future = (actor ? Run[A, D](a, runner)) map { value =>
+      value.asInstanceOf[Response[D]] match {
+        case Response(Success(result)) =>
+          result.asInstanceOf[D]
+        case Response(Failure(err)) =>
+          throw err
+      }
+    }
+
+    future.onComplete { _ =>
+      actorRefFactory.stop(actor)
+    }
+
+    future
+  }
+
+  object RunnerActor
+
+  class RunnerActor[A, D] extends Actor with ActorLogging {
+    def receive: Receive = {
+      case Run(value, runner) =>
+        val v = value.asInstanceOf[A]
+        val r = runner.asInstanceOf[A => D]
+
+        sender() ! Response(Try(r(v)))
+      case other =>
+        log.warning("Unrecognized message: {}", other)
+    }
+  }
 //
 //  case class Initialize(prev: Option[ActorRef], next: Option[ActorRef])
 //  case class Downstream[A](recipient: Option[ActorRef], value: Try[A])

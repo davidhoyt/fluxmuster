@@ -17,7 +17,7 @@ package object fluxmuster2 {
   import scala.language.implicitConversions
 
   implicit object FutureLiftOp extends LiftOp[ExecutionContext, Future] {
-    def apply[A, D](runner: A => D)(implicit ec: ExecutionContext): A => Future[D] =
+    def apply[A, D](runner: A => D)(implicit ec: ExecutionContext, connections: Connections): A => Future[D] =
       (a: A) =>
         future {
           runner(a)
