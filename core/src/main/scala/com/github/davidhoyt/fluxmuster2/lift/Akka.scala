@@ -29,7 +29,7 @@ object Akka {
   def par[T](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tS: TypeTagTree[State]): LiftedNeedsStep[State, Future] =
     LiftedNeedsStep(NAME, State(configuration), AkkaParallelOps)(tS)
 
-  object AkkaSerialOps extends LiftOp[State, Future] {
+  object AkkaSerialOps extends LiftOps[State, Future] {
     implicit def point[A](given: => A)(implicit state: State): Future[A] =
       FutureLiftOp.point(given)(state.context)
 
@@ -43,7 +43,7 @@ object Akka {
       runSerial(runner, state)
   }
 
-  object AkkaParallelOps extends LiftOp[State, Future] {
+  object AkkaParallelOps extends LiftOps[State, Future] {
     implicit def point[A](given: => A)(implicit state: State): Future[A] =
       FutureLiftOp.point(given)(state.context)
 

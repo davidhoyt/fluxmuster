@@ -45,7 +45,7 @@ object Hystrix {
     LiftedNeedsStep(name, state, new HystrixOps[T])(tS)
   }
 
-  class HystrixOps[T] extends LiftOp[State[T], Future] {
+  class HystrixOps[T] extends LiftOps[State[T], Future] {
     implicit def point[A](given: => A)(implicit state: State[T]): Future[A] =
       FutureLiftOp.point(given)(state.context)
 

@@ -20,7 +20,7 @@ package object fluxmuster2 {
 
   import com.github.davidhoyt.fluxmuster.TypeTagTree
 
-  implicit object FutureLiftOp extends LiftOp[ExecutionContext, Future] {
+  implicit object FutureLiftOp extends LiftOps[ExecutionContext, Future] {
     def apply[A, D](runner: A => D)(implicit ec: ExecutionContext, connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] =
       (a: A) =>
         future {
@@ -107,5 +107,23 @@ package object fluxmuster2 {
         build
     }
     step(None, xs, Seq.empty)
+  }
+
+  implicit class LiftOpsWithoutStateEnhancements[F[_]](val op: LiftOpsWithoutState[F]) {
+    implicit def toLiftOps[S] = new LiftOps[S, F] {
+      //Throws away the state.
+
+      def apply[A, D](runner: A => D)(implicit state: S, connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => F[D] =
+        op.apply(runner)(connections, typeAccept, typeResult)
+
+      def point[A](given: => A)(implicit state: S): F[A] =
+        op.point(given)
+
+      def flatten[A](given: F[F[A]])(implicit state: S): F[A] =
+        op.flatten(given)
+
+      def map[A, B](given: F[A])(fn: A => B)(implicit state: S): F[B] =
+        op.map(given)(fn)
+    }
   }
 }
