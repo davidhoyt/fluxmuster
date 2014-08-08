@@ -25,24 +25,24 @@ object Hystrix {
 
   val NAME = Macros.simpleNameOf[Hystrix.type]
 
-  case class State[T](fallback: () => T, configuration: HystrixConfiguration, lifted: Boolean)(implicit val timeout: Timeout, val context: ExecutionContext, val typeFallback: TypeTagTree[T], val typeLiftedFallback: TypeTagTree[Future[T]])
+  case class State[T](fallback: () => T, configuration: HystrixConfiguration)(implicit val timeout: Timeout, val context: ExecutionContext, val typeFallback: TypeTagTree[T], val typeLiftedFallback: TypeTagTree[Future[T]])
 
   def apply[T](name: String)
               (fallback: => T = throw new UnsupportedOperationException("No fallback available"))
-              (implicit configuration: HystrixConfiguration, timeout: Timeout, executionContext: ExecutionContext, typeFallback: TypeTagTree[T], typeLiftedFallback: TypeTagTree[Future[T]], typeState: TypeTagTree[State[T]]): LiftedNeedsStep[State[T], Future] =
-    apply(name, configuration)(fallback)
+              (implicit configuration: HystrixConfiguration, timeout: Timeout, executionContext: ExecutionContext, tT: TypeTagTree[T], tFutureOfT: TypeTagTree[Future[T]], tS: TypeTagTree[State[T]]): LiftedNeedsStep[State[T], Future] =
+    apply(name, configuration)(fallback)(timeout, executionContext, tT, tFutureOfT, tS)
 
   def apply[T](name: String, configuration: HystrixConfiguration)
               (fallback: => T = throw new UnsupportedOperationException("No fallback available"))
-              (implicit timeout: Timeout, executionContext: ExecutionContext, typeFallback: TypeTagTree[T], typeLiftedFallback: TypeTagTree[Future[T]], typeState: TypeTagTree[State[T]]): LiftedNeedsStep[State[T], Future] = {
+              (implicit timeout: Timeout, executionContext: ExecutionContext, tT: TypeTagTree[T], tFutureOfT: TypeTagTree[Future[T]], tS: TypeTagTree[State[T]]): LiftedNeedsStep[State[T], Future] = {
 
     require(timeout.duration.isFinite(), s"Hystrix timeout must be a finite amount")
 
     //Override the configuration with the provided timeout.
     val adjustedConfiguration = configuration.copy(timeout = timeout.duration)
-    val state = State(() => fallback, adjustedConfiguration, false)
+    val state = State(() => fallback, adjustedConfiguration)
 
-    LiftedNeedsStep(name, state, new HystrixOps[T])
+    LiftedNeedsStep(name, state, new HystrixOps[T])(tS)
   }
 
   class HystrixOps[T] extends LiftOp[State[T], Future] {
@@ -67,8 +67,6 @@ object Hystrix {
       construct[A, D](convertedState, convertedOps)(runner).apply(convertedState.fallback)
     }
   }
-
-
 
   private def construct[A, D](state: State[D], ops: HystrixOps[D])(runner: A => D): HystCommandNeedsFallback[A, D] =
     (providedFallback: () => D) => {

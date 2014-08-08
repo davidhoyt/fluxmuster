@@ -20,14 +20,14 @@ object Akka {
 
   case class State(configuration: AkkaConfiguration)(implicit val timeout: Timeout, val context: ExecutionContext, val actorRefFactory: ActorRefFactory)
 
-  def apply[T](implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): LiftedNeedsStep[State, Future] =
-    apply(AkkaConfiguration())
+  def apply[T](implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tS: TypeTagTree[State]): LiftedNeedsStep[State, Future] =
+    apply(AkkaConfiguration())(timeout, executionContext, actorRefFactory, tS)
 
-  def apply[T](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): LiftedNeedsStep[State, Future] =
-    LiftedNeedsStep(NAME, State(configuration), AkkaSerialOps)
+  def apply[T](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tS: TypeTagTree[State]): LiftedNeedsStep[State, Future] =
+    LiftedNeedsStep(NAME, State(configuration), AkkaSerialOps)(tS)
 
-  def par[T](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): LiftedNeedsStep[State, Future] =
-    LiftedNeedsStep(NAME, State(configuration), AkkaParallelOps)
+  def par[T](configuration: AkkaConfiguration)(implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory, tS: TypeTagTree[State]): LiftedNeedsStep[State, Future] =
+    LiftedNeedsStep(NAME, State(configuration), AkkaParallelOps)(tS)
 
   object AkkaSerialOps extends LiftOp[State, Future] {
     implicit def point[A](given: => A)(implicit state: State): Future[A] =

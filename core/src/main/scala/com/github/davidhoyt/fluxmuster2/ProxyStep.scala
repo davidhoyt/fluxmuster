@@ -15,7 +15,6 @@ trait Runner[A, B, C, D] { this: StepConnections =>
     run(a)
 
   def run(a: A)(implicit evidence: B <:< C): D = {
-    //println(s"Connections: $connections")
     upstream(evidence(downstream(a)))
   }
 }
@@ -51,12 +50,8 @@ trait StepLike[A, B, C, D] {
 }
 
 trait Step[A, B, C, D] extends StepLike[A, B, C, D] with Runner[A, B, C, D] with StepConnections {
-  def combine[T, U](step: SimpleStep[B, T, U, C]): Step[A, T, U, D] = {
-    val typeAcceptDownstream = Step.this.typeAcceptDownstream
-    val typeMappedDownstream = step.typeMappedDownstream
-    val typeAcceptUpstream = step.typeAcceptUpstream
-    val typeMappedUpstream = Step.this.typeMappedUpstream
-
+  //**
+  def combine[T, U](step: SimpleStep[B, T, U, C])(implicit tA: TypeTagTree[A], tT: TypeTagTree[T], tU: TypeTagTree[U], tD: TypeTagTree[D]): Step[A, T, U, D] = {
     val down = downstream andThen step.downstream
     val up = upstream compose step.upstream
 
@@ -68,16 +63,12 @@ trait Step[A, B, C, D] extends StepLike[A, B, C, D] with Runner[A, B, C, D] with
           seq
       }
 
-    Step("<~>", down, up, connections)(typeAcceptDownstream, typeMappedDownstream, typeAcceptUpstream, typeMappedUpstream)
+    Step("<~>", down, up, connections)(tA, tT, tU, tD)
   }
 
-  def lift[S, F[_]](needsStep: LiftedNeedsStep[S, F])(implicit evidence: B <:< C, converter: F -> F, tFofB: TypeTagTree[F[B]], tFofD: TypeTagTree[F[D]]): LiftedAndFlatten[A, D, S, F] =
-    needsStep.lift(this)
-
-//  //def combine[T, U, F[_]](lifted: Lifted[T, A, D, U, F]): Step[T, B, C, U] =
-//  //  lifted.step.combine(this)
-//  def combine[T, U, S, F[_]](lifted: Lifted[B, T, U, C, S, F]): Step[A, T, U, D] =
-//    combine(lifted.step)
+  //**
+  def lift[S, F[_]](needsStep: LiftedNeedsStep[S, F])(implicit evidence: B <:< C, converter: F -> F, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D], tS: TypeTagTree[S], tFofD: TypeTagTree[F[D]]): LiftedAndFlatten[A, D, S, F] =
+    needsStep.lift(this)(evidence, converter, tA, tB, tC, tD, tS, tFofD)
 }
 
 object Step {
@@ -91,10 +82,10 @@ object Step {
   }
 
   def apply[A, B, C, D](name: String, downstream: LinkDownstream[A, B], upstream: LinkUpstream[C, D])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D]): Step[A, B, C, D] =
-    Builder(name, downstream, upstream, null)
+    Builder(name, downstream, upstream, null)(tA, tB, tC, tD)
 
   def apply[A, B, C, D](name: String, downstream: LinkDownstream[A, B], upstream: LinkUpstream[C, D], connections: Connections)(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D]): Step[A, B, C, D] =
-    Builder(name, downstream, upstream, connections)
+    Builder(name, downstream, upstream, connections)(tA, tB, tC, tD)
 
   def unapply[A, B, C, D](step: SimpleStep[A, B, C, D]): Option[(LinkDownstream[A, B], LinkUpstream[C, D], Connections)] =
     PartialFunction.condOpt(step) {
@@ -104,7 +95,7 @@ object Step {
 
 object DownAndUp {
   def apply[A, B, C, D](downstream: LinkDownstream[A, B], upstream: LinkDownstream[C, D])(implicit tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D]): Step[A, B, C, D] =
-    Step("DownAndUp", downstream, upstream)
+    Step("DownAndUp", downstream, upstream)(tA, tB, tC, tD)
 }
 
 object Identity {
@@ -149,6 +140,7 @@ trait LiftLike[S, F[_]] {
   implicit val state: S
   implicit val op: LiftOp[S, F]
 
+  //**
   protected def runInThisContext[A, D, G[_]](connections: Connections)(runner: A => G[D])(implicit converter: G -> F, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[G[D]]): LinkDownstream[A, F[D]] =
     (a: A) => {
       val runOtherInThisContext: A => F[G[D]] = op.apply(runner)(state, connections, typeAccept, typeResult)
@@ -165,25 +157,22 @@ sealed trait LiftedAndFlatten[A, D, S, F[_]] extends LiftLike[S, F] with StepLik
   implicit lazy val typeMappedDownstream = typeMappedUpstream
   implicit lazy val typeAcceptUpstream = typeMappedUpstream
 
-//  def lift[U, V, W, G[_]](other: Lifted[A, U, V, G[D], W, G])(implicit e1: U <:< V, converter: G -> F, typeResult: TypeTagTree[G[D]]): LiftedAndFlatten[A, D, S, F] = {
-//    val connections = immutable.Seq(other)
-//    val f = op.apply(other.run)(state, connections, typeAcceptDownstream, typeAcceptUpstream)
-//    LiftedAndFlatten[A, D, S, F](name, runInThisContext(connections)(other.run), state, op, connections)(typeAcceptDownstream, typeMappedUpstream, typeState)
-//  }
-  def lift[W, G[_]](other: LiftedNeedsStep[W, G])(implicit converter: F -> G, tA: TypeTagTree[A], tFofD: TypeTagTree[F[D]], tGofD: TypeTagTree[G[D]]) =
-    other.lift(LiftedAndFlatten.this)(converter, tGofD, tA, tFofD)
+  //**
+  def lift[W, G[_]](other: LiftedNeedsStep[W, G])(implicit converter: F -> G, tA: TypeTagTree[A], tW: TypeTagTree[W], tFofD: TypeTagTree[F[D]], tGofD: TypeTagTree[G[D]]): LiftedAndFlatten[A, D, W, G] =
+    other.lift(LiftedAndFlatten.this)(converter, tA, tGofD, tW, tFofD)
 
-  def lift[U, V, W, G[_]](other: LiftedAndFlatten[A, D, W, G])(implicit converter: G -> F, typeResult: TypeTagTree[G[D]]): LiftedAndFlatten[A, D, S, F] = {
+  //**
+  def lift[U, V, W, G[_]](other: LiftedAndFlatten[A, D, W, G])(implicit converter: G -> F, tA: TypeTagTree[A], tFofD: TypeTagTree[F[D]], tS: TypeTagTree[S], tGofD: TypeTagTree[G[D]]): LiftedAndFlatten[A, D, S, F] = {
     val connections = immutable.Seq(other)
-    LiftedAndFlatten[A, D, S, F](name, runInThisContext(connections)(other.run), state, op, connections)(typeAcceptDownstream, typeMappedUpstream, typeState)
+    LiftedAndFlatten[A, D, S, F](name, runInThisContext(connections)(other.run)(converter, tA, tGofD), state, op, connections)(tA, tFofD, tS)
   }
 }
 
 object LiftedAndFlatten {
   private case class Builder[A, D, S, F[_]](name: String, downstream: LinkDownstream[A, F[D]], upstream: LinkUpstream[F[D], F[D]], state: S, op: LiftOp[S, F], connections: Connections)(implicit val typeAcceptDownstream: TypeTagTree[A], val typeMappedUpstream: TypeTagTree[F[D]], val typeState: TypeTagTree[S]) extends LiftedAndFlatten[A, D, S, F]
 
-  def apply[A, D, S, F[_]](name: String, downstream: LinkDownstream[A, F[D]], state: S, op: LiftOp[S, F], connections: Connections)(implicit typeAcceptDownstream: TypeTagTree[A], typeMappedUpstream: TypeTagTree[F[D]], typeState: TypeTagTree[S]): LiftedAndFlatten[A, D, S, F] =
-    Builder[A, D, S, F](name, downstream, identity[F[D]], state, op, connections)
+  def apply[A, D, S, F[_]](name: String, downstream: LinkDownstream[A, F[D]], state: S, op: LiftOp[S, F], connections: Connections)(implicit tA: TypeTagTree[A], tFofD: TypeTagTree[F[D]], tS: TypeTagTree[S]): LiftedAndFlatten[A, D, S, F] =
+    Builder[A, D, S, F](name, downstream, identity[F[D]], state, op, connections)(tA, tFofD, tS)
 }
 
 //trait Lifted[A, B, C, D, S, F[_]] extends LiftLike[S, F] with StepLike[A, B, C, F[D]] with Runner[A, B, C, F[D]] with StepConnections {
@@ -247,18 +236,18 @@ object Implicits {
 
 object LiftUpstream {
   def apply[A, D, F[_]](lift: D => F[D])(implicit tA: TypeTagTree[A], tD: TypeTagTree[D], tFofD: TypeTagTree[F[D]]): Step[A, A, D, F[D]] =
-    Step("LiftUpstream", identity[A], identity[D]_ andThen lift)
+    Step("LiftUpstream", identity[A], identity[D]_ andThen lift)(tA, tA, tD, tFofD)
 }
 
-trait LiftedNeedsStep[S, F[_]] extends LiftLike[S, F] /*with StepConnections*/ {
+trait LiftedNeedsStep[S, F[_]] extends LiftLike[S, F] {
   val name: String
 
-  def lift[A, B, C, D](step: SimpleStep[A, B, C, D])(implicit e1: B <:< C, converter: F -> F, typeLiftIntoBridge: TypeTagTree[F[B]], typeLiftIntoUpstream: TypeTagTree[F[D]]): LiftedAndFlatten[A, D, S, F] = {
-    import step.typeAcceptDownstream
-    val liftedUpstream = LiftUpstream[A, D, F]((d: D) => op.point(d))(step.typeAcceptDownstream, step.typeMappedUpstream, typeLiftIntoUpstream)
-    val combinedStep = liftedUpstream combine step
+  //**
+  def lift[A, B, C, D](step: SimpleStep[A, B, C, D])(implicit e1: B <:< C, converter: F -> F, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D], tS: TypeTagTree[S], tFofD: TypeTagTree[F[D]]): LiftedAndFlatten[A, D, S, F] = {
+    val liftedUpstream = LiftUpstream[A, D, F]((d: D) => op.point(d))
+    val combinedStep = liftedUpstream.combine(step)(tA, tB, tC, tFofD)
     val connections = liftedUpstream +: step.connections
-    LiftedAndFlatten[A, D, S, F](name, runInThisContext[A, D, F](connections)(combinedStep.run), state, op, connections)(step.typeAcceptDownstream, typeLiftIntoUpstream, typeState)
+    LiftedAndFlatten[A, D, S, F](name, runInThisContext[A, D, F](connections)(combinedStep.run)(converter, tA, tFofD), state, op, connections)(tA, tFofD, tS)
   }
 
   //S = Akka.State
@@ -292,24 +281,25 @@ trait LiftedNeedsStep[S, F[_]] extends LiftLike[S, F] /*with StepConnections*/ {
 //    LiftedNeedsStep(other.name, other.state, )
 //  }
 
-  def lift[A, D, W, G[_]](other: LiftedAndFlatten[A, D, W, G])(implicit converter: G -> F, typeLiftIntoUpstream: TypeTagTree[F[D]], typeAccept: TypeTagTree[A], typeResult: TypeTagTree[G[D]]): LiftedAndFlatten[A, D, S, F] = {
+  //**
+  def lift[A, D, W, G[_]](other: LiftedAndFlatten[A, D, W, G])(implicit converter: G -> F, tA: TypeTagTree[A], tFofD: TypeTagTree[F[D]], tS: TypeTagTree[S], tGofD: TypeTagTree[G[D]]): LiftedAndFlatten[A, D, S, F] = {
     val connections = immutable.Seq(other)
-    LiftedAndFlatten[A, D, S, F](name, runInThisContext(connections)(other.run), state, op, connections)(other.typeAcceptDownstream, typeLiftIntoUpstream, typeState)
+    LiftedAndFlatten[A, D, S, F](name, runInThisContext(connections)(other.run)(converter, tA, tGofD), state, op, connections)(tA, tFofD, tS)
   }
 }
 
 object LiftedNeedsStep {
   private case class Builder[S, F[_]](name: String, state: S, op: LiftOp[S, F])(implicit val typeState: TypeTagTree[S]) extends LiftedNeedsStep[S, F]
 
-  def apply[S, F[_]](name: String, state: S, op: LiftOp[S, F])(implicit typeState: TypeTagTree[S]): LiftedNeedsStep[S, F] =
-    Builder(name, state, op)
+  def apply[S, F[_]](name: String, state: S, op: LiftOp[S, F])(implicit tS: TypeTagTree[S]): LiftedNeedsStep[S, F] =
+    Builder(name, state, op)(tS)
 }
 
 object RunInFuture {
   val NAME = Macros.simpleNameOf[RunInFuture.type]
 
-  def apply(name: String = NAME)(implicit ec: ExecutionContext, liftOp: LiftOp[ExecutionContext, Future]): LiftedNeedsStep[ExecutionContext, Future] =
-    LiftedNeedsStep(name, ec, liftOp)
+  def apply(name: String = NAME)(implicit ec: ExecutionContext, liftOp: LiftOp[ExecutionContext, Future], tS: TypeTagTree[ExecutionContext]): LiftedNeedsStep[ExecutionContext, Future] =
+    LiftedNeedsStep(name, ec, liftOp)(tS)
 }
 
 object Test extends App {
