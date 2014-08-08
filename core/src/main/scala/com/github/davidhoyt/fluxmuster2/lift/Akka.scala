@@ -39,7 +39,7 @@ object Akka {
     implicit def map[A, B](given: Future[A])(fn: A => B)(implicit state: State): Future[B] =
       FutureLiftOp.map(given)(fn)(state.context)
 
-    implicit def apply[A, D](runner: A => D)(implicit state: State, connections: Connections, shouldLiftResult: Boolean, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] =
+    implicit def apply[A, D](runner: A => D)(implicit state: State, connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] =
       runSerial(runner, state)
   }
 
@@ -53,8 +53,8 @@ object Akka {
     implicit def map[A, B](given: Future[A])(fn: A => B)(implicit state: State): Future[B] =
       FutureLiftOp.map(given)(fn)(state.context)
 
-    implicit def apply[A, D](runner: A => D)(implicit state: State, connections: Connections, shouldLiftResult: Boolean, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] =
-      runParallel(runner, connections, shouldLiftResult, state)
+    implicit def apply[A, D](runner: A => D)(implicit state: State, connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] =
+      runParallel(runner, connections, state)
   }
 
   private def runSerial[A, D](runner: A => D, state: State)(a: A): Future[D] = {
@@ -97,7 +97,7 @@ object Akka {
   case class Downstream[A](recipient: Option[ActorRef], value: Try[A])
   case class Upstream[A](recipient: ActorRef, value: Try[A])
 
-  private def runParallel[A, D](implicit runner: A => D, connections: Connections, shouldLiftResult: Boolean, state: State): A => Future[D] = {
+  private def runParallel[A, D](implicit runner: A => D, connections: Connections, state: State): A => Future[D] = {
     import akka.pattern.ask
     import state._
 
@@ -126,15 +126,9 @@ object Akka {
         (actorRefs.head ? Downstream[A](None, Success(a)))
         .map {
           case Success(value) =>
-            if (!shouldLiftResult)
-              value.asInstanceOf[D]
-            else
-              Future.successful(value).asInstanceOf[D]
+            value.asInstanceOf[D]
           case Failure(error) =>
-            if (!shouldLiftResult)
-              throw error
-            else
-              Future.failed(error).asInstanceOf[D]
+            throw error
           case unexpected =>
             throw new IllegalStateException(s"Received unexpected value: $unexpected")
         }

@@ -42,8 +42,7 @@ object Hystrix {
     val adjustedConfiguration = configuration.copy(timeout = timeout.duration)
     val state = State(() => fallback, adjustedConfiguration, false)
 
-    LiftedNeedsStep(name, state, new HystrixOps[T], mapStateOnLiftAndFlatten = {(s: State[T]) =>
-      s.copy(lifted = true)})
+    LiftedNeedsStep(name, state, new HystrixOps[T])
   }
 
   class HystrixOps[T] extends LiftOp[State[T], Future] {
@@ -56,7 +55,7 @@ object Hystrix {
     implicit def map[A, B](given: Future[A])(fn: A => B)(implicit state: State[T]): Future[B] =
       FutureLiftOp.map(given)(fn)(state.context)
 
-    implicit def apply[A, D](runner: A => D)(implicit state: State[T], connections: Connections, shouldLiftResult: Boolean, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] = {
+    implicit def apply[A, D](runner: A => D)(implicit state: State[T], connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] = {
       //typeResult = Future[D]
       //state.typeLiftedFallback = Future[T]
       val unliftedTypeArgumentResult = typeResult.typeArguments.head.tpe

@@ -21,7 +21,7 @@ package object fluxmuster2 {
   import com.github.davidhoyt.fluxmuster.TypeTagTree
 
   implicit object FutureLiftOp extends LiftOp[ExecutionContext, Future] {
-    def apply[A, D](runner: A => D)(implicit ec: ExecutionContext, connections: Connections, shouldLiftResult: Boolean, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] =
+    def apply[A, D](runner: A => D)(implicit ec: ExecutionContext, connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] =
       (a: A) =>
         future {
           runner(a)

@@ -32,9 +32,6 @@ trait StepLike[A, B, C, D] {
 
   val name: String
 
-  def shouldLiftResult: Boolean =
-    false
-
   def asShortString: String =
     null
 
@@ -73,6 +70,9 @@ trait Step[A, B, C, D] extends StepLike[A, B, C, D] with Runner[A, B, C, D] with
 
     Step("<~>", down, up, connections)(typeAcceptDownstream, typeMappedDownstream, typeAcceptUpstream, typeMappedUpstream)
   }
+
+  def lift[S, F[_]](needsStep: LiftedNeedsStep[S, F])(implicit evidence: B <:< C, converter: F -> F, tFofB: TypeTagTree[F[B]], tFofD: TypeTagTree[F[D]]): LiftedAndFlatten[A, D, S, F] =
+    needsStep.lift(this)
 
 //  //def combine[T, U, F[_]](lifted: Lifted[T, A, D, U, F]): Step[T, B, C, U] =
 //  //  lifted.step.combine(this)
@@ -121,7 +121,7 @@ import scala.language.higherKinds
 import scala.language.implicitConversions
 
 trait LiftOp[S, F[_]] {
-  implicit def apply[A, D](runner: A => D)(implicit state: S, connections: Connections, shouldLiftResult: Boolean, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => F[D]
+  implicit def apply[A, D](runner: A => D)(implicit state: S, connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => F[D]
   implicit def point[A](given: => A)(implicit state: S): F[A]
   implicit def flatten[A](given: F[F[A]])(implicit state: S): F[A]
   implicit def map[A, B](given: F[A])(fn: A => B)(implicit state: S): F[B]
@@ -149,34 +149,9 @@ trait LiftLike[S, F[_]] {
   implicit val state: S
   implicit val op: LiftOp[S, F]
 
-  protected def liftRunner[A, D](runner: A => D): A => F[D] =
+  protected def runInThisContext[A, D, G[_]](connections: Connections)(runner: A => G[D])(implicit converter: G -> F, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[G[D]]): LinkDownstream[A, F[D]] =
     (a: A) => {
-      op.point(runner(a))(state)
-    }
-
-  protected def runInThisContext[A, D, G[_]](connections: Connections, shouldLiftResult: Boolean)(runner: A => G[D])(implicit converter: G -> F, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[G[D]]): LinkDownstream[A, F[D]] =
-    (a: A) => {
-      //A = Int
-      //D = Long
-      //G = Future
-
-      //runner: Int => Future[Long]
-      //converter: Future -> Future
-
-      //op.apply = AkkaParallelOps.apply[A/Int, G[D]/Future[Long]](Int => Future[Long]): A => Future[G[D]] // Int => Future[Future[D]]
-      //runOtherInThisContext: Int => Future[Future[Long]]
-      //resultAfterRunning: Future[Future[Long]]
-
-      //op.map = AkkaParallelOps.map[G[D], F[D]](Future[Future[Long]])): Future[Future[Long]]
-
-      //step: SimpleStep[Int, Int, Int, Long]
-      //l: LiftedAndFlatten[Int, Long, Akka.State, Future]
-      //   StepLike[Int, Future[Long], Future[Long], Future[Long]]
-      //step.run: Int => Long
-      //liftRunner(Int => Long): Int => Future[Long]
-      //runInThisContext[Int, Long, Future](...)(Int => Future[Long])
-
-      val runOtherInThisContext: A => F[G[D]] = op.apply(runner)(state, connections, shouldLiftResult, typeAccept, typeResult)
+      val runOtherInThisContext: A => F[G[D]] = op.apply(runner)(state, connections, typeAccept, typeResult)
       val resultAfterRunning: F[G[D]] = runOtherInThisContext(a)
 
       //flatMap!
@@ -195,18 +170,20 @@ sealed trait LiftedAndFlatten[A, D, S, F[_]] extends LiftLike[S, F] with StepLik
 //    val f = op.apply(other.run)(state, connections, typeAcceptDownstream, typeAcceptUpstream)
 //    LiftedAndFlatten[A, D, S, F](name, runInThisContext(connections)(other.run), state, op, connections)(typeAcceptDownstream, typeMappedUpstream, typeState)
 //  }
+  def lift[W, G[_]](other: LiftedNeedsStep[W, G])(implicit converter: F -> G, tA: TypeTagTree[A], tFofD: TypeTagTree[F[D]], tGofD: TypeTagTree[G[D]]) =
+    other.lift(LiftedAndFlatten.this)(converter, tGofD, tA, tFofD)
 
   def lift[U, V, W, G[_]](other: LiftedAndFlatten[A, D, W, G])(implicit converter: G -> F, typeResult: TypeTagTree[G[D]]): LiftedAndFlatten[A, D, S, F] = {
     val connections = immutable.Seq(other)
-    LiftedAndFlatten[A, D, S, F](name, runInThisContext(connections, shouldLiftResult = false)(other.run), state, op, connections)(typeAcceptDownstream, typeMappedUpstream, typeState)
+    LiftedAndFlatten[A, D, S, F](name, runInThisContext(connections)(other.run), state, op, connections)(typeAcceptDownstream, typeMappedUpstream, typeState)
   }
 }
 
 object LiftedAndFlatten {
-  private case class Builder[A, D, S, F[_]](name: String, downstream: LinkDownstream[A, F[D]], upstream: LinkUpstream[F[D], F[D]], state: S, op: LiftOp[S, F], connections: Connections, override val shouldLiftResult: Boolean)(implicit val typeAcceptDownstream: TypeTagTree[A], val typeMappedUpstream: TypeTagTree[F[D]], val typeState: TypeTagTree[S]) extends LiftedAndFlatten[A, D, S, F]
+  private case class Builder[A, D, S, F[_]](name: String, downstream: LinkDownstream[A, F[D]], upstream: LinkUpstream[F[D], F[D]], state: S, op: LiftOp[S, F], connections: Connections)(implicit val typeAcceptDownstream: TypeTagTree[A], val typeMappedUpstream: TypeTagTree[F[D]], val typeState: TypeTagTree[S]) extends LiftedAndFlatten[A, D, S, F]
 
-  def apply[A, D, S, F[_]](name: String, downstream: LinkDownstream[A, F[D]], state: S, op: LiftOp[S, F], connections: Connections, shouldLiftResult: Boolean = false)(implicit typeAcceptDownstream: TypeTagTree[A], typeMappedUpstream: TypeTagTree[F[D]], typeState: TypeTagTree[S]): LiftedAndFlatten[A, D, S, F] =
-    Builder[A, D, S, F](name, downstream, identity[F[D]], state, op, connections, shouldLiftResult)
+  def apply[A, D, S, F[_]](name: String, downstream: LinkDownstream[A, F[D]], state: S, op: LiftOp[S, F], connections: Connections)(implicit typeAcceptDownstream: TypeTagTree[A], typeMappedUpstream: TypeTagTree[F[D]], typeState: TypeTagTree[S]): LiftedAndFlatten[A, D, S, F] =
+    Builder[A, D, S, F](name, downstream, identity[F[D]], state, op, connections)
 }
 
 //trait Lifted[A, B, C, D, S, F[_]] extends LiftLike[S, F] with StepLike[A, B, C, F[D]] with Runner[A, B, C, F[D]] with StepConnections {
@@ -268,28 +245,64 @@ object Implicits {
   implicit val futureLiftOp = FutureLiftOp
 }
 
+object LiftUpstream {
+  def apply[A, D, F[_]](lift: D => F[D])(implicit tA: TypeTagTree[A], tD: TypeTagTree[D], tFofD: TypeTagTree[F[D]]): Step[A, A, D, F[D]] =
+    Step("LiftUpstream", identity[A], identity[D]_ andThen lift)
+}
+
 trait LiftedNeedsStep[S, F[_]] extends LiftLike[S, F] /*with StepConnections*/ {
   val name: String
 
-  val mapStateOnLift: S => S
-  val mapStateOnLiftAndFlatten: S => S
-
   def lift[A, B, C, D](step: SimpleStep[A, B, C, D])(implicit e1: B <:< C, converter: F -> F, typeLiftIntoBridge: TypeTagTree[F[B]], typeLiftIntoUpstream: TypeTagTree[F[D]]): LiftedAndFlatten[A, D, S, F] = {
     import step.typeAcceptDownstream
-    LiftedAndFlatten[A, D, S, F](name, runInThisContext[A, D, F](step.connections, shouldLiftResult = true)(liftRunner(step.run)), mapStateOnLift(state), op, step.connections, shouldLiftResult = true)(step.typeAcceptDownstream, typeLiftIntoUpstream, typeState)
+    val liftedUpstream = LiftUpstream[A, D, F]((d: D) => op.point(d))(step.typeAcceptDownstream, step.typeMappedUpstream, typeLiftIntoUpstream)
+    val combinedStep = liftedUpstream combine step
+    val connections = liftedUpstream +: step.connections
+    LiftedAndFlatten[A, D, S, F](name, runInThisContext[A, D, F](connections)(combinedStep.run), state, op, connections)(step.typeAcceptDownstream, typeLiftIntoUpstream, typeState)
   }
 
-  def lift[A, D, W, G[_]](other: LiftedAndFlatten[A, D, W, G])(implicit converter: G -> F, typeLiftIntoUpstream: TypeTagTree[F[D]], typeAccept: TypeTagTree[A], typeResult: TypeTagTree[G[D]], tDeleteMe: TypeTagTree[F[G[D]]]): LiftedAndFlatten[A, D, S, F] = {
+  //S = Akka.State
+  //F = Future
+  //W = Hystrix.State
+  //G = Future
+//  def lift[W, G[_]](other: LiftedNeedsStep[W, G])(implicit converter: G -> F): LiftedNeedsStep[W, G] = {
+//    val connections = EmptyConnections
+//    val appliedLiftOp = new LiftOp[W, G] {
+//      def point[A](given: => A)(implicit state: S): G[A]
+//      def flatten[A](given: G[G[A]])(implicit state: S): G[A]
+//      def map[A, B](given: G[A])(fn: A => B)(implicit state: S): G[B]
+//      def apply[A, D](runner: A => D)(implicit state: S, connections: Connections, shouldLiftResult: Boolean, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => G[D] = {
+//        op.apply(other)
+//      }
+//
+//      def apply[A1, D1](state: S)(runner: (A1) => D1): (A1) => F[D1] = {
+//        val otherToRunInThisInstance: A1 => G[D1] = other.op.apply(other.state)(runner)
+//        val converted: A1 => F[D1] = (a: A1) => {
+//          val z = otherToRunInThisInstance(a).asInstanceOf[F[D1]]
+//          z
+//        }
+//        val runnerWithThisInstance: A1 => F[F[D1]] = op.apply[A1, F[D1]](state)(converted)
+//        val result = runnerWithThisInstance andThen op.flatten(state)
+//        result
+//      }
+//
+//      def flatten[A1](state: S)(given: F[F[A1]]): F[A1] =
+//        op.flatten(state)(given)
+//    }
+//    LiftedNeedsStep(other.name, other.state, )
+//  }
+
+  def lift[A, D, W, G[_]](other: LiftedAndFlatten[A, D, W, G])(implicit converter: G -> F, typeLiftIntoUpstream: TypeTagTree[F[D]], typeAccept: TypeTagTree[A], typeResult: TypeTagTree[G[D]]): LiftedAndFlatten[A, D, S, F] = {
     val connections = immutable.Seq(other)
-    LiftedAndFlatten[A, D, S, F](name, runInThisContext(connections, shouldLiftResult = false)(other.run), mapStateOnLiftAndFlatten(state), op, connections)(other.typeAcceptDownstream, typeLiftIntoUpstream, typeState)
+    LiftedAndFlatten[A, D, S, F](name, runInThisContext(connections)(other.run), state, op, connections)(other.typeAcceptDownstream, typeLiftIntoUpstream, typeState)
   }
 }
 
 object LiftedNeedsStep {
-  private case class Builder[S, F[_]](name: String, state: S, op: LiftOp[S, F], mapStateOnLift: S => S, mapStateOnLiftAndFlatten: S => S)(implicit val typeState: TypeTagTree[S]) extends LiftedNeedsStep[S, F]
+  private case class Builder[S, F[_]](name: String, state: S, op: LiftOp[S, F])(implicit val typeState: TypeTagTree[S]) extends LiftedNeedsStep[S, F]
 
-  def apply[S, F[_]](name: String, state: S, op: LiftOp[S, F], mapStateOnLift: S => S = identity[S] _, mapStateOnLiftAndFlatten: S => S = identity[S] _)(implicit typeState: TypeTagTree[S]): LiftedNeedsStep[S, F] =
-    Builder(name, state, op, mapStateOnLift, mapStateOnLiftAndFlatten)
+  def apply[S, F[_]](name: String, state: S, op: LiftOp[S, F])(implicit typeState: TypeTagTree[S]): LiftedNeedsStep[S, F] =
+    Builder(name, state, op)
 }
 
 object RunInFuture {
@@ -344,18 +357,25 @@ object Test extends App {
 //  val ff5 = lift.Akka.par(lift.AkkaConfiguration()) lift ff1
 //  val ff6 = lift.Hystrix("???", lift.HystrixConfiguration())(myFallback) lift ff5
 
+  val parAkkaWithCombine = a3 combine a1 combine a2 lift lift.Akka.par(lift.AkkaConfiguration()) lift lift.Hystrix("???", lift.HystrixConfiguration())(10L)
+  println(Await.result(parAkkaWithCombine(0), 10.seconds))
+
   val parAkka: LiftedAndFlatten[Int, Int, lift.Akka.State, Future] = lift.Akka.par(lift.AkkaConfiguration()) lift IncrementBy2
   val serialAkka: LiftedAndFlatten[Int, Int, lift.Akka.State, Future] = lift.Akka(lift.AkkaConfiguration()) lift IncrementBy2
   val parAkkaHystrix: LiftedAndFlatten[Int, Int, lift.Akka.State, Future] = lift.Akka.par(lift.AkkaConfiguration()) lift (lift.Hystrix("???", lift.HystrixConfiguration())(20) lift IncrementBy2)
   val serialAkkaHystrix: LiftedAndFlatten[Int, Int, lift.Akka.State, Future] = lift.Akka(lift.AkkaConfiguration()) lift (lift.Hystrix("???", lift.HystrixConfiguration())(20) lift IncrementBy2)
   val parHystrixAkka: LiftedAndFlatten[Int, Int, lift.Hystrix.State[Int], Future] =  lift.Hystrix("???", lift.HystrixConfiguration())(20) lift (lift.Akka.par(lift.AkkaConfiguration()) lift IncrementBy2)
   val serialHystrixAkka: LiftedAndFlatten[Int, Int, lift.Hystrix.State[Int], Future] =  lift.Hystrix("???", lift.HystrixConfiguration())(20) lift (lift.Akka(lift.AkkaConfiguration()) lift IncrementBy2)
+  val parHystrixHystrixAkka: LiftedAndFlatten[Int, Int, lift.Hystrix.State[Int], Future] =  lift.Hystrix("???", lift.HystrixConfiguration())(200) lift (lift.Hystrix("???", lift.HystrixConfiguration())(20) lift (lift.Akka.par(lift.AkkaConfiguration()) lift IncrementBy2))
+  val serialHystrixHystrixAkka: LiftedAndFlatten[Int, Int, lift.Hystrix.State[Int], Future] =  lift.Hystrix("???", lift.HystrixConfiguration())(200) lift (lift.Hystrix("???", lift.HystrixConfiguration())(20) lift (lift.Akka(lift.AkkaConfiguration()) lift IncrementBy2))
   println(Await.result(parAkka(0), 10.seconds))
   println(Await.result(serialAkka(0), 10.seconds))
   println(Await.result(parAkkaHystrix(0), 10.seconds))
   println(Await.result(serialAkkaHystrix(0), 10.seconds))
   println(Await.result(parHystrixAkka(222), 10.seconds))
   println(Await.result(serialHystrixAkka(111), 10.seconds))
+  println(Await.result(parHystrixHystrixAkka(111), 10.seconds))
+  println(Await.result(serialHystrixHystrixAkka(111), 10.seconds))
 
   val qqq = lift.Hystrix("???", lift.HystrixConfiguration())(20L) lift foo
   println(Await.result(qqq(0), 10.seconds))
