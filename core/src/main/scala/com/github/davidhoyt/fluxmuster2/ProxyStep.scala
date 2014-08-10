@@ -50,7 +50,10 @@ trait StepLike[A, B, C, D] {
 }
 
 trait Step[A, B, C, D] extends StepLike[A, B, C, D] with Runner[A, B, C, D] with StepConnections {
-  //**
+
+  def <~>[T, U](step: SimpleStep[B, T, U, C])(implicit tA: TypeTagTree[A], tT: TypeTagTree[T], tU: TypeTagTree[U], tD: TypeTagTree[D]): Step[A, T, U, D] =
+    combine(step)(tA, tT, tU, tD)
+
   def combine[T, U](step: SimpleStep[B, T, U, C])(implicit tA: TypeTagTree[A], tT: TypeTagTree[T], tU: TypeTagTree[U], tD: TypeTagTree[D]): Step[A, T, U, D] = {
     val down = downstream andThen step.downstream
     val up = upstream compose step.upstream
@@ -66,7 +69,9 @@ trait Step[A, B, C, D] extends StepLike[A, B, C, D] with Runner[A, B, C, D] with
     Step("<~>", down, up, connections)(tA, tT, tU, tD)
   }
 
-  //**
+  def |>[S, F[_]](needsStep: LiftedNeedsStep[S, F])(implicit evidence: B => C, converter: F -> F, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D], tS: TypeTagTree[S], tFofD: TypeTagTree[F[D]]): LiftedAndFlatten[A, D, S, F] =
+    lift(needsStep)(evidence, converter, tA, tB, tC, tD, tS, tFofD)
+
   def lift[S, F[_]](needsStep: LiftedNeedsStep[S, F])(implicit evidence: B => C, converter: F -> F, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D], tS: TypeTagTree[S], tFofD: TypeTagTree[F[D]]): LiftedAndFlatten[A, D, S, F] =
     needsStep.lift(this)(evidence, converter, tA, tB, tC, tD, tS, tFofD)
 }
@@ -112,14 +117,14 @@ import scala.language.higherKinds
 import scala.language.implicitConversions
 
 trait LiftOps[S, F[_]] {
-  implicit def apply[A, D](runner: A => D)(implicit state: S, connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => F[D]
+  implicit def liftRunner[A, D](runner: A => D)(implicit state: S, connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => F[D]
   implicit def point[A](given: => A)(implicit state: S): F[A]
   implicit def flatten[A](given: F[F[A]])(implicit state: S): F[A]
   implicit def map[A, B](given: F[A])(fn: A => B)(implicit state: S): F[B]
 }
 
 trait LiftOpsWithoutState[F[_]] {
-  implicit def apply[A, D](runner: A => D)(implicit connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => F[D]
+  implicit def liftRunner[A, D](runner: A => D)(implicit connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => F[D]
   implicit def point[A](given: => A): F[A]
   implicit def flatten[A](given: F[F[A]]): F[A]
   implicit def map[A, B](given: F[A])(fn: A => B): F[B]
@@ -132,7 +137,7 @@ trait LiftLike[S, F[_]] {
 
   protected def runInThisContext[A, D, G[_]](connections: Connections)(runner: A => G[D])(implicit converter: G -> F, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[G[D]]): LinkDownstream[A, F[D]] =
     (a: A) => {
-      val runOtherInThisContext: A => F[G[D]] = op.apply(runner)(state, connections, typeAccept, typeResult)
+      val runOtherInThisContext: A => F[G[D]] = op.liftRunner(runner)(state, connections, typeAccept, typeResult)
       val resultAfterRunning: F[G[D]] = runOtherInThisContext(a)
 
       //flatMap!
@@ -146,8 +151,14 @@ sealed trait LiftedAndFlatten[A, D, S, F[_]] extends LiftLike[S, F] with StepLik
   implicit lazy val typeMappedDownstream = typeMappedUpstream
   implicit lazy val typeAcceptUpstream = typeMappedUpstream
 
+  def |>[W, G[_]](other: LiftedNeedsStep[W, G])(implicit converter: F -> G, tA: TypeTagTree[A], tW: TypeTagTree[W], tFofD: TypeTagTree[F[D]], tGofD: TypeTagTree[G[D]]): LiftedAndFlatten[A, D, W, G] =
+    lift(other)(converter, tA, tW, tFofD, tGofD)
+
   def lift[W, G[_]](other: LiftedNeedsStep[W, G])(implicit converter: F -> G, tA: TypeTagTree[A], tW: TypeTagTree[W], tFofD: TypeTagTree[F[D]], tGofD: TypeTagTree[G[D]]): LiftedAndFlatten[A, D, W, G] =
     other.lift(LiftedAndFlatten.this)(converter, tA, tGofD, tW, tFofD)
+
+  def |>[U, V, W, G[_]](other: LiftedAndFlatten[A, D, W, G])(implicit converter: G -> F, tA: TypeTagTree[A], tFofD: TypeTagTree[F[D]], tS: TypeTagTree[S], tGofD: TypeTagTree[G[D]]): LiftedAndFlatten[A, D, S, F] =
+    lift(other)(converter, tA, tFofD, tS, tGofD)
 
   def lift[U, V, W, G[_]](other: LiftedAndFlatten[A, D, W, G])(implicit converter: G -> F, tA: TypeTagTree[A], tFofD: TypeTagTree[F[D]], tS: TypeTagTree[S], tGofD: TypeTagTree[G[D]]): LiftedAndFlatten[A, D, S, F] = {
     val connections = immutable.Seq(other)
@@ -175,12 +186,18 @@ object LiftUpstream {
 trait LiftedNeedsStep[S, F[_]] extends LiftLike[S, F] {
   val name: String
 
-  def lift[A, B, C, D](step: SimpleStep[A, B, C, D])(implicit e1: B => C, converter: F -> F, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D], tS: TypeTagTree[S], tFofD: TypeTagTree[F[D]]): LiftedAndFlatten[A, D, S, F] = {
+  def |>[A, B, C, D](step: SimpleStep[A, B, C, D])(implicit evidence: B => C, converter: F -> F, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D], tS: TypeTagTree[S], tFofD: TypeTagTree[F[D]]): LiftedAndFlatten[A, D, S, F] =
+    lift(step)(evidence, converter, tA, tB, tC, tD, tS, tFofD)
+
+  def lift[A, B, C, D](step: SimpleStep[A, B, C, D])(implicit evidence: B => C, converter: F -> F, tA: TypeTagTree[A], tB: TypeTagTree[B], tC: TypeTagTree[C], tD: TypeTagTree[D], tS: TypeTagTree[S], tFofD: TypeTagTree[F[D]]): LiftedAndFlatten[A, D, S, F] = {
     val liftedUpstream = LiftUpstream[A, D, F]((d: D) => op.point(d))
     val combinedStep = liftedUpstream.combine(step)(tA, tB, tC, tFofD)
     val connections = liftedUpstream +: step.connections
     LiftedAndFlatten[A, D, S, F](name, runInThisContext[A, D, F](connections)(combinedStep.run)(converter, tA, tFofD), state, op, connections)(tA, tFofD, tS)
   }
+
+  def |>[A, D, W, G[_]](other: LiftedAndFlatten[A, D, W, G])(implicit converter: G -> F, tA: TypeTagTree[A], tFofD: TypeTagTree[F[D]], tS: TypeTagTree[S], tGofD: TypeTagTree[G[D]]): LiftedAndFlatten[A, D, S, F] =
+    lift(other)(converter, tA, tFofD, tS, tGofD)
 
   def lift[A, D, W, G[_]](other: LiftedAndFlatten[A, D, W, G])(implicit converter: G -> F, tA: TypeTagTree[A], tFofD: TypeTagTree[F[D]], tS: TypeTagTree[S], tGofD: TypeTagTree[G[D]]): LiftedAndFlatten[A, D, S, F] = {
     val connections = immutable.Seq(other)
@@ -205,6 +222,7 @@ object RunInFuture {
 object Test extends App {
   import scala.concurrent.duration._
   import scala.concurrent.ExecutionContext.Implicits.global
+  import lift._
   //import Implicits._
 
   implicit val timeout = Timeout(10.seconds)
@@ -247,17 +265,24 @@ object Test extends App {
 //  val ff5 = lift.Akka.par(lift.AkkaConfiguration()) lift ff1
 //  val ff6 = lift.Hystrix("???", lift.HystrixConfiguration())(myFallback) lift ff5
 
-  val parAkkaWithCombine = a3 combine a1 combine a2 lift lift.Akka.par(lift.AkkaConfiguration()) lift lift.Hystrix("???", lift.HystrixConfiguration())(10L)
-  println(Await.result(parAkkaWithCombine(0), 10.seconds))
+  val parAkkaWithCombine = a3 <~> a1 <~> a2 |> Akka(AkkaConfiguration()) |> Hystrix("Hystrix", HystrixConfiguration(timeout = 5.seconds))(77777L)
+  val result = Await.result(
+    Future.sequence(
+      for (i <- 0 until 100)
+        yield parAkkaWithCombine(i)
+    ),
+    10.seconds
+  )
+  println(result)
 
-  val parAkka: LiftedAndFlatten[Int, Int, lift.Akka.State, Future] = lift.Akka.par(lift.AkkaConfiguration()) lift IncrementBy2
-  val serialAkka: LiftedAndFlatten[Int, Int, lift.Akka.State, Future] = lift.Akka(lift.AkkaConfiguration()) lift IncrementBy2
-  val parAkkaHystrix: LiftedAndFlatten[Int, Int, lift.Akka.State, Future] = lift.Akka.par(lift.AkkaConfiguration()) lift (lift.Hystrix("???", lift.HystrixConfiguration())(20) lift IncrementBy2)
-  val serialAkkaHystrix: LiftedAndFlatten[Int, Int, lift.Akka.State, Future] = lift.Akka(lift.AkkaConfiguration()) lift (lift.Hystrix("???", lift.HystrixConfiguration())(20) lift IncrementBy2)
-  val parHystrixAkka: LiftedAndFlatten[Int, Int, lift.Hystrix.State[Int], Future] =  lift.Hystrix("???", lift.HystrixConfiguration())(20) lift (lift.Akka.par(lift.AkkaConfiguration()) lift IncrementBy2)
-  val serialHystrixAkka: LiftedAndFlatten[Int, Int, lift.Hystrix.State[Int], Future] =  lift.Hystrix("???", lift.HystrixConfiguration())(20) lift (lift.Akka(lift.AkkaConfiguration()) lift IncrementBy2)
-  val parHystrixHystrixAkka: LiftedAndFlatten[Int, Int, lift.Hystrix.State[Int], Future] =  lift.Hystrix("???", lift.HystrixConfiguration())(200) lift (lift.Hystrix("???", lift.HystrixConfiguration())(20) lift (lift.Akka.par(lift.AkkaConfiguration()) lift IncrementBy2))
-  val serialHystrixHystrixAkka: LiftedAndFlatten[Int, Int, lift.Hystrix.State[Int], Future] =  lift.Hystrix("???", lift.HystrixConfiguration())(200) lift (lift.Hystrix("???", lift.HystrixConfiguration())(20) lift (lift.Akka(lift.AkkaConfiguration()) lift IncrementBy2))
+  val parAkka                  = lift.Akka.par(lift.AkkaConfiguration()) lift IncrementBy2
+  val serialAkka               = lift.Akka(lift.AkkaConfiguration()) lift IncrementBy2
+  val parAkkaHystrix           = lift.Akka.par(lift.AkkaConfiguration()) lift (lift.Hystrix("???", lift.HystrixConfiguration())(20) lift IncrementBy2)
+  val serialAkkaHystrix        = lift.Akka(lift.AkkaConfiguration()) lift (lift.Hystrix("???", lift.HystrixConfiguration())(20) lift IncrementBy2)
+  val parHystrixAkka           = lift.Hystrix("???", lift.HystrixConfiguration())(20) lift (lift.Akka.par(lift.AkkaConfiguration()) lift IncrementBy2)
+  val serialHystrixAkka        = lift.Hystrix("???", lift.HystrixConfiguration())(20) lift (lift.Akka(lift.AkkaConfiguration()) lift IncrementBy2)
+  val parHystrixHystrixAkka    = lift.Hystrix("???", lift.HystrixConfiguration())(200) lift (lift.Hystrix("???", lift.HystrixConfiguration())(20) lift (lift.Akka.par(lift.AkkaConfiguration()) lift IncrementBy2))
+  val serialHystrixHystrixAkka = lift.Hystrix("???", lift.HystrixConfiguration())(200) lift (lift.Hystrix("???", lift.HystrixConfiguration())(20) lift (lift.Akka(lift.AkkaConfiguration()) lift IncrementBy2))
   println(Await.result(parAkka(0), 10.seconds))
   println(Await.result(serialAkka(0), 10.seconds))
   println(Await.result(parAkkaHystrix(0), 10.seconds))

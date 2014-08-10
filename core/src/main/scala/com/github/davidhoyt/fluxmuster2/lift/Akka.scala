@@ -39,7 +39,7 @@ object Akka {
     implicit def map[A, B](given: Future[A])(fn: A => B)(implicit state: State): Future[B] =
       FutureLiftOp.map(given)(fn)(state.context)
 
-    implicit def apply[A, D](runner: A => D)(implicit state: State, connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] =
+    implicit def liftRunner[A, D](runner: A => D)(implicit state: State, connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] =
       runSerial(runner, state)
   }
 
@@ -53,7 +53,7 @@ object Akka {
     implicit def map[A, B](given: Future[A])(fn: A => B)(implicit state: State): Future[B] =
       FutureLiftOp.map(given)(fn)(state.context)
 
-    implicit def apply[A, D](runner: A => D)(implicit state: State, connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] =
+    implicit def liftRunner[A, D](runner: A => D)(implicit state: State, connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] =
       runParallel(runner, connections, state)
   }
 

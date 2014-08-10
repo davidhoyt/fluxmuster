@@ -55,7 +55,7 @@ object Hystrix {
     implicit def map[A, B](given: Future[A])(fn: A => B)(implicit state: State[T]): Future[B] =
       FutureLiftOp.map(given)(fn)(state.context)
 
-    implicit def apply[A, D](runner: A => D)(implicit state: State[T], connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] = {
+    implicit def liftRunner[A, D](runner: A => D)(implicit state: State[T], connections: Connections, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] = {
       //typeResult = Future[D]
       //state.typeLiftedFallback = Future[T]
       val unliftedTypeArgumentResult = typeResult.typeArguments.head.tpe
