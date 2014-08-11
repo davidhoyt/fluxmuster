@@ -1,5 +1,9 @@
 package com.github.davidhoyt.fluxmuster3
 
+object BiDirectionalLike {
+  type Dependencies = Named
+}
+
 trait BiDirectionalLike { self: BiDirectionalLike.Dependencies =>
   type DownstreamIn
   type DownstreamOut
@@ -34,8 +38,4 @@ trait BiDirectionalLike { self: BiDirectionalLike.Dependencies =>
     case ref: BiDirectionalLike if ref.downstream == downstream && ref.upstream == upstream => true
     case _ => false
   }
-}
-
-object BiDirectionalLike {
-  type Dependencies = Named
 }

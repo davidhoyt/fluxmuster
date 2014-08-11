@@ -23,7 +23,15 @@ class BiDirectionalSpec extends UnitSpec {
   val link7: Linked[String, String] = link1 <~ link2 //<~ link1 <~ link2
   val link8: Linked[String, Seq[String]] = link7 ~> link4
 
+  it should "have a proper toString()" in {
+    BiDirectional("BiDi1").toString should be (s"${Macros.simpleNameOf[EmptyBiDirectional.type]}(BiDi1)")
+    (BiDirectional("BiDi2") ~> link1).toString should be (s"${Macros.simpleNameOf[BiDirectional.type]}(BiDi2)[${link1.typeIn.toShortString}, ${link1.typeOut.toShortString}, ${link1.typeOut.toShortString}, ${link1.typeOut.toShortString}]")
+  }
+
   it should "properly compose a series of downstream function links" in {
 
+    val b1 = BiDirectional("BiDi1") ~> link1 ~> link4 <~ link1 <~ link2
+    val b2 = b1
+    println(b1)
   }
 }

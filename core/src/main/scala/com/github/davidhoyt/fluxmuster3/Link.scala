@@ -110,4 +110,7 @@ object Link {
       def apply[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B =
         outToB(fn(aToIn(a)))
     }
+
+  def identity[A](implicit tA: TypeTagTree[A]): Linked[A, A] =
+    (Predef.identity[A]_).toLink(tA, tA)
 }

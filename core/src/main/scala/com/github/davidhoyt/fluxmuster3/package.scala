@@ -17,7 +17,7 @@ package object fluxmuster3 {
   type Upstream[-In, +Out] = Linked[_ >: In, _ <: Out]
 
   type BiDi[-DownstreamIn0, +DownstreamOut0, -UpstreamIn0, +UpstreamOut0] =
-    BiDirectionalLike {
+    BiDirectional {
       type DownstreamIn >: DownstreamIn0
       type DownstreamOut <: DownstreamOut0
       type UpstreamIn >: UpstreamIn0
@@ -40,6 +40,11 @@ package object fluxmuster3 {
 
   implicit object FutureConverter extends (Future -> Future) {
     implicit def apply[A](f: Future[A]): Future[A] = f
+  }
+
+  implicit class LinkEnhancements[In0, Out0](val link: Link { type In = In0; type Out = Out0 }) extends AnyVal {
+    def toLinked: Linked[In0, Out0] =
+      link.asInstanceOf[Linked[In0, Out0]]
   }
 
   implicit class FunctionEnhancements[In, Out](val fn: In => Out) extends AnyVal {
