@@ -120,6 +120,14 @@ sealed trait TypeTagTree[T] {
   /** Provides a string representing this [[TypeTagTree]] instance. */
   override def toString: String =
     s"TypeTagTree($toShortString, $source)"
+
+  /** Determines if another instance is equal to this [[TypeTagTree]] instance. */
+  override def equals(other: Any): Boolean =
+    other match {
+      case ref: TypeTagTree[_] if tpe == ref.tpe => true
+      case ref: AnyRef => ref eq TypeTagTree.this
+      case _ => false
+    }
 }
 
 object TypeTagTree {

@@ -90,11 +90,12 @@ trait Link { this: ChainingStrategy with Named =>
   override def hashCode: Int =
     typeIn.hashCode() * 31 + typeOut.hashCode()
 
-  override def equals(other: Any): Boolean = other match {
-    case ref: Link if typeIn == ref.typeIn && typeOut == ref.typeOut => true
-    case ref: AnyRef => ref eq Link.this
-    case _ => false
-  }
+  override def equals(other: Any): Boolean =
+    other match {
+      case ref: Link if typeIn == ref.typeIn && typeOut == ref.typeOut => true
+      case ref: AnyRef => ref eq Link.this
+      case _ => false
+    }
 }
 
 object Link {

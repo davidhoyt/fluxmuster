@@ -3,6 +3,9 @@ package com.github.davidhoyt.fluxmuster3
 import com.github.davidhoyt.fluxmuster.{Macros, UnitSpec}
 
 class BiDirectionalSpec extends UnitSpec {
+  import scala.collection._
+  import scala.language.existentials
+
   behavior of Macros.simpleNameOf[BiDirectional.type]
 
   def stringToLong(x: String) = x.toLong
@@ -13,6 +16,8 @@ class BiDirectionalSpec extends UnitSpec {
   def stringToInt(s: String) = s.toInt
   def liftToSeq[A](a: A) = Seq(a)
   def seqToHead[A](a: Seq[A]): A = a.head
+
+  val linkStringIdentity = Link.identity[java.lang.String]
 
   val link1: Linked[Int, String] = polyToString[Int]_
   val link2: Linked[String, Int] = stringToInt _
@@ -30,8 +35,23 @@ class BiDirectionalSpec extends UnitSpec {
 
   it should "properly compose a series of downstream function links" in {
 
-    val b1 = BiDirectional("BiDi1") ~> link1 ~> link4 <~ link1 <~ link2
-    val b2 = b1
-    println(b1)
+    val b1 = BiDirectional("BiDi1") ~> link1 ~> link4 // <~ link1 <~ link2
+    b1.downstream.chain should be (immutable.Seq(link1, link4))
+    //Should be the following, but would require a new trait where the downstream
+    //can be defined but upstream isn't. The opposite as well where upstream is
+    //defined by downstream isn't. ~>/<~ off of BiDirectional should create those
+    //instances.
+    //
+    //b1.upstream.chain should be (immutable.Seq(Link.identity[Seq[String]]))
+    b1.upstream.chain should be (immutable.Seq(linkStringIdentity))
+
+    val b2 = b1 <~ link1 <~ link2
+    b2.downstream.chain should be (b1.downstream.chain)
+    b2.upstream.chain should be (immutable.Seq(link2, link1, linkStringIdentity))
+
+    val b3: BiDi[Int, Seq[String], Seq[String], String] = b2 <~ link5
+    b3.downstream.chain should be (b1.downstream.chain)
+    b3.upstream.chain should be (link5 +: b2.upstream.chain)
+    b3(0) should be ("0")
   }
 }

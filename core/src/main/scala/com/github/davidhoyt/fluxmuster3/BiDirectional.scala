@@ -18,6 +18,9 @@ trait BiDirectionalDsl { self: BiDirectionalDsl.Dependencies =>
 
   def up[A, B](linked: Linked[A, B])(implicit proofLinkedOutCanRouteToUpstreamIn: B => UpstreamIn): BiDi[DownstreamIn, DownstreamOut, A, UpstreamOut] =
     BiDirectional.create(name)(downstream)(upstream.compose(linked)(proofLinkedOutCanRouteToUpstreamIn))
+
+  def combine[A, B, C, D](other: BiDi[A, B, C, D]): BiDi[DownstreamIn, B, C, UpstreamOut] =
+    ???
 }
 
 object BiDirectionalRun {
