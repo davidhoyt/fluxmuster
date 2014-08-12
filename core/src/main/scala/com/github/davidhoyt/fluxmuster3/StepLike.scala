@@ -1,10 +1,10 @@
 package com.github.davidhoyt.fluxmuster3
 
-object BiDirectionalLike {
+object StepLike {
   type Dependencies = Named
 }
 
-trait BiDirectionalLike[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] { self: BiDirectionalLike.Dependencies =>
+trait StepLike[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] { self: StepLike.Dependencies =>
 
   val downstream: Downstream[DownstreamIn, DownstreamOut]
   val upstream: Upstream[UpstreamIn, UpstreamOut]
@@ -41,7 +41,7 @@ trait BiDirectionalLike[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] { 
 
   override def equals(other: Any): Boolean = other match {
     case ref: AnyRef if ref eq this => true
-    case ref: BiDirectionalLike[_, _, _, _] if ref.downstream == downstream && ref.upstream == upstream => true
+    case ref: StepLike[_, _, _, _] if ref.downstream == downstream && ref.upstream == upstream => true
     case _ => false
   }
 }

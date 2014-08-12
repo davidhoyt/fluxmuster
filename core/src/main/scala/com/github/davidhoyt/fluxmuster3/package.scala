@@ -17,7 +17,7 @@ package object fluxmuster3 {
     Link[_, _]
 
   type ChainableBiDi =
-    BiDirectionalLike[_, _, _, _] with BiDirectionalRun[_, _, _, _] with BiDirectionalChaining with Named
+    StepLike[_, _, _, _] with StepRun[_, _, _, _] with StepChaining with Named
 
   type ChainLink = immutable.Seq[ChainableLink]
   val EmptyChainLink = immutable.Seq[ChainableLink]()

@@ -25,7 +25,7 @@ object LinkProvidedChain {
       mine
 }
 
-trait BiDirectionalChaining {
+trait StepChaining {
   implicit val chain: ChainBiDi
   def chainTogether(instance: ChainableBiDi, mine: ChainBiDi, other: ChainBiDi): ChainBiDi
 }
