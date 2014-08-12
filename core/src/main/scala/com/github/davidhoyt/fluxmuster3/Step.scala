@@ -41,11 +41,11 @@ trait StepRun[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] {
     upstream(proofDownstreamCanRouteToUpstream(downstream.apply(e)(mapToIn, identity)))
 
   /** Generates a [[Link]] instance that when called runs the downstream and then passes it to the upstream. */
-  def runLink(implicit proofDownstreamCanRouteToUpstream: DownstreamOut => UpstreamIn): Link[DownstreamIn, UpstreamOut] =
-    runLinkEx[DownstreamIn, DownstreamOut, UpstreamIn](proofDownstreamCanRouteToUpstream, identity, downstream.typeIn)
+  def createLink(implicit proofDownstreamCanRouteToUpstream: DownstreamOut => UpstreamIn): Link[DownstreamIn, UpstreamOut] =
+    createLinkEx[DownstreamIn, DownstreamOut, UpstreamIn](proofDownstreamCanRouteToUpstream, identity, downstream.typeIn)
 
   /** Generates a [[Link]] instance that when called runs the downstream and then passes it to the upstream. */
-  def runLinkEx[E, F >: DownstreamOut, G <: UpstreamIn](implicit proofDownstreamCanRouteToUpstream: F => G, mapToIn: E => DownstreamIn, tE: TypeTagTree[E]): Link[E, UpstreamOut] =
+  def createLinkEx[E, F >: DownstreamOut, G <: UpstreamIn](implicit proofDownstreamCanRouteToUpstream: F => G, mapToIn: E => DownstreamIn, tE: TypeTagTree[E]): Link[E, UpstreamOut] =
     Link((e: E) => upstream(proofDownstreamCanRouteToUpstream(downstream.apply(e)(mapToIn, identity))))(tE, upstream.typeOut)
 }
 
@@ -83,11 +83,11 @@ trait EmptyStep extends Named {
 }
 
 object Step {
-  private case class Build[A, B, C, D](name: String, downstream: Downstream[A, B], upstream: Upstream[C, D], mine: ChainBiDi, other: ChainBiDi)(val chaining: (ChainableBiDi, ChainBiDi, ChainBiDi) => ChainBiDi) extends Step[A, B, C, D] with Named {
+  private case class Build[A, B, C, D](name: String, downstream: Downstream[A, B], upstream: Upstream[C, D], mine: ChainStep, other: ChainStep)(val chaining: FnChainStep) extends Step[A, B, C, D] with Named {
     lazy val chain =
       chainTogether(this, mine, other)
 
-    def chainTogether(instance: ChainableBiDi, mine: ChainBiDi, other: ChainBiDi): ChainBiDi =
+    def chainTogether(instance: ChainableStep, mine: ChainStep, other: ChainStep): ChainStep =
       chaining(instance, mine, other)
 
     override def toString =
@@ -104,13 +104,13 @@ object Step {
     create(Macros.simpleNameOf[Step.type])(downstream)(upstream)
 
   def create[A, B, C, D](name: String)(downstream: Downstream[A, B])(upstream: Upstream[C, D]): Step[A, B, C, D] =
-    Build[A, B, C, D](name, downstream, upstream, EmptyChainBiDi, EmptyChainBiDi)(BiDirectionalProvidedChain.apply)
+    Build[A, B, C, D](name, downstream, upstream, EmptyChainStep, EmptyChainStep)(StepProvidedChain.apply)
 
-  def createCombined[A, B, C, D](mine: ChainBiDi, other: ChainBiDi)(downstream: Downstream[A, B])(upstream: Upstream[C, D]): Step[A, B, C, D] =
+  def createCombined[A, B, C, D](mine: ChainStep, other: ChainStep)(downstream: Downstream[A, B])(upstream: Upstream[C, D]): Step[A, B, C, D] =
     createCombined(Macros.simpleNameOf[Step.type])(mine, other)(downstream)(upstream)
 
-  def createCombined[A, B, C, D](name: String)(mine: ChainBiDi, other: ChainBiDi)(downstream: Downstream[A, B])(upstream: Upstream[C, D]): Step[A, B, C, D] =
-    Build[A, B, C, D](name, downstream, upstream, mine, other)(BiDirectionalCombinedChain.apply)
+  def createCombined[A, B, C, D](name: String)(mine: ChainStep, other: ChainStep)(downstream: Downstream[A, B])(upstream: Upstream[C, D]): Step[A, B, C, D] =
+    Build[A, B, C, D](name, downstream, upstream, mine, other)(StepCombinedChain.apply)
 
   def apply(name: String): EmptyStep =
     EmptyStep(name)

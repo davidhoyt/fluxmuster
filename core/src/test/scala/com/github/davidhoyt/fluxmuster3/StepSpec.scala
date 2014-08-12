@@ -29,13 +29,13 @@ class StepSpec extends UnitSpec {
   val link8: Link[String, Seq[String]] = link7 ~> linkLiftToSeqString
 
   it should "have a proper toString()" in {
-    Step("BiDi1").toString should be (s"${Macros.simpleNameOf[EmptyStep.type]}(BiDi1)")
-    (Step("BiDi2") ~> linkIntToString).toString should be (s"${Macros.simpleNameOf[Step.type]}(BiDi2)[${linkIntToString.typeIn.toShortString}, ${linkIntToString.typeOut.toShortString}, ${linkIntToString.typeOut.toShortString}, ${linkIntToString.typeOut.toShortString}]")
+    Step("Step1").toString should be (s"${Macros.simpleNameOf[EmptyStep.type]}(Step1)")
+    (Step("Step2") ~> linkIntToString).toString should be (s"${Macros.simpleNameOf[Step.type]}(Step2)[${linkIntToString.typeIn.toShortString}, ${linkIntToString.typeOut.toShortString}, ${linkIntToString.typeOut.toShortString}, ${linkIntToString.typeOut.toShortString}]")
   }
 
   it should "properly compose a series of downstream function links" in {
 
-    val b1 = Step("BiDi1") ~> linkIntToString ~> linkLiftToSeqString // <~ link1 <~ link2
+    val b1 = Step("Step1") ~> linkIntToString ~> linkLiftToSeqString // <~ link1 <~ link2
     b1.downstream.chain should be (immutable.Seq(linkIntToString, linkLiftToSeqString))
     //Should be the following, but would require a new trait where the downstream
     //can be defined but upstream isn't. The opposite as well where upstream is
@@ -54,13 +54,12 @@ class StepSpec extends UnitSpec {
     b3.upstream.chain should be (linkHeadSeqString +: b2.upstream.chain)
     b3(0) should be ("0")
 
-    val b4 = Step("BiDi4") ~> linkHeadSeqString ~> linkStringToInt
-    val b5 = Step.create("BiDi5")(linkHeadSeqString ~> linkStringToInt)(linkLiftToSeqString <~ linkIntToStringRepeated)
+    val b4 = Step("Step4") ~> linkHeadSeqString ~> linkStringToInt
+    val b5 = Step.create("Step5")(linkHeadSeqString ~> linkStringToInt)(linkLiftToSeqString <~ linkIntToStringRepeated)
     val b6 = b3 combine b5
     b6(0) should be ("0")
 
-    val b6link = b6.runLink
+    val b6link = b6.createLink
     b6link(0)(identity, identity) should be ("0")
-
   }
 }

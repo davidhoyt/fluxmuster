@@ -16,20 +16,20 @@ package object fluxmuster3 {
   type ChainableLink =
     Link[_, _]
 
-  type ChainableBiDi =
+  type ChainableStep =
     StepLike[_, _, _, _] with StepRun[_, _, _, _] with StepChaining with Named
 
   type ChainLink = immutable.Seq[ChainableLink]
   val EmptyChainLink = immutable.Seq[ChainableLink]()
 
-  type ChainBiDi = immutable.Seq[ChainableBiDi]
-  val EmptyChainBiDi = immutable.Seq[ChainableBiDi]()
+  type ChainStep = immutable.Seq[ChainableStep]
+  val EmptyChainStep = immutable.Seq[ChainableStep]()
 
   type FnChainLink =
     (ChainableLink, ChainLink, ChainLink) => ChainLink
 
-  type FnChainBiDi =
-    (ChainableBiDi, ChainBiDi, ChainBiDi) => ChainBiDi
+  type FnChainStep =
+    (ChainableStep, ChainStep, ChainStep) => ChainStep
 
   implicit object FutureConverter extends (Future -> Future) {
     implicit def apply[A](f: Future[A]): Future[A] = f

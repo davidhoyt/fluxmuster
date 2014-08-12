@@ -26,23 +26,23 @@ object LinkProvidedChain {
 }
 
 trait StepChaining {
-  implicit val chain: ChainBiDi
-  def chainTogether(instance: ChainableBiDi, mine: ChainBiDi, other: ChainBiDi): ChainBiDi
+  implicit val chain: ChainStep
+  def chainTogether(instance: ChainableStep, mine: ChainStep, other: ChainStep): ChainStep
 }
 
-object BiDirectionalProvidedChain {
+object StepProvidedChain {
   import scala.collection.immutable
 
-  def apply(instance: ChainableBiDi, mine: ChainBiDi, other: ChainBiDi): ChainBiDi =
+  def apply(instance: ChainableStep, mine: ChainStep, other: ChainStep): ChainStep =
     if ((mine eq null) || mine.isEmpty)
       immutable.Seq(instance)
     else
       mine
 }
 
-object BiDirectionalCombinedChain {
-  def apply(instance: ChainableBiDi, mine: ChainBiDi, other: ChainBiDi): ChainBiDi =
-    (mine ++ other).foldLeft(EmptyChainBiDi) {
+object StepCombinedChain {
+  def apply(instance: ChainableStep, mine: ChainStep, other: ChainStep): ChainStep =
+    (mine ++ other).foldLeft(EmptyChainStep) {
       case (seq, p) if p.chain.nonEmpty =>
         seq :+ p.chain.head
       case (seq, _) =>
