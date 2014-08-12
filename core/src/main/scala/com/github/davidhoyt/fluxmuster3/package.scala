@@ -13,9 +13,6 @@ package object fluxmuster3 {
   type Upstream[In, Out] =
     Link[In, Out]
 
-  type BiDi[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] =
-    BiDirectional[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
-
   type ChainableLink =
     Link[_, _]
 

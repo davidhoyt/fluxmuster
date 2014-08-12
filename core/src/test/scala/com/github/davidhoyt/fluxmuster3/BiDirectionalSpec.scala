@@ -49,16 +49,15 @@ class BiDirectionalSpec extends UnitSpec {
     b2.downstream.chain should be (b1.downstream.chain)
     b2.upstream.chain should be (immutable.Seq(link2, link1, linkStringIdentity))
 
-    val b3: BiDi[Int, Seq[String], Seq[String], String] = b2 <~ link5
+    val b3: BiDirectional[Int, Seq[String], Seq[String], String] = b2 <~ link5
     b3.downstream.chain should be (b1.downstream.chain)
     b3.upstream.chain should be (link5 +: b2.upstream.chain)
     b3(0) should be ("0")
 
-    val b4 = BiDirectional("BiDi4") ~> link5 ~> link2
-    println(b4)
+    val b4 = BiDiStep("BiDi4") ~> link5 ~> link2
     val b5 = BiDirectional.create("BiDi5")(link5 ~> link2)(link4 <~ link3)
     val b6 = b3 combine b5
-    println(b5)
+    b6(0) should be ("0")
 
   }
 }

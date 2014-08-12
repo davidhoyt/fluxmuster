@@ -1,7 +1,5 @@
 package com.github.davidhoyt.fluxmuster3
 
-import scala.collection._
-
 trait LinkChaining {
   val chain: ChainLink
   protected def chainTogether(instance: ChainableLink, mine: ChainLink, other: ChainLink): ChainLink
@@ -18,6 +16,8 @@ object LinkCombinedChain {
 }
 
 object LinkProvidedChain {
+  import scala.collection.immutable
+
   def apply(instance: ChainableLink, mine: ChainLink, other: ChainLink): ChainLink =
     if ((mine eq null) || mine.isEmpty)
       immutable.Seq(instance)
