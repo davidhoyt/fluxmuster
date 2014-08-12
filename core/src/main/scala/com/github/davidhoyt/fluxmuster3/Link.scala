@@ -69,9 +69,12 @@ trait Link[In, Out] extends LinkChaining { self: Named =>
 
   override def equals(other: Any): Boolean =
     other match {
-      case ref: Link[_, _] if typeIn == ref.typeIn && typeOut == ref.typeOut => true
-      case ref: AnyRef => ref eq Link.this
-      case _ => false
+      case ref: Link[_, _] if typeIn == ref.typeIn && typeOut == ref.typeOut =>
+        true
+      case ref: AnyRef =>
+        ref eq Link.this
+      case _ =>
+        false
     }
 }
 
