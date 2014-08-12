@@ -10,7 +10,7 @@ import com.github.davidhoyt.fluxmuster.TypeTagTree
  * information recorded for runtime reflection and all composed links are
  * tracked as a chain.
  */
-trait Link[In, Out] { this: LinkChainingStrategy with Named =>
+trait Link[In, Out] extends LinkChaining { self: Named =>
   import scala.collection._
 
   implicit val typeIn: TypeTagTree[In]
@@ -40,40 +40,26 @@ trait Link[In, Out] { this: LinkChainingStrategy with Named =>
   def asFunction[A, B](implicit aToIn: A => In, outToB: Out => B): A => B =
     (a: A) => apply(aToIn(a))(identity, outToB)
 
-  def ~>[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Linked[In, OtherOut] =
+  def ~>[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Link[In, OtherOut] =
     andThen(other)(thisOutToOtherIn)
 
-  def down[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Linked[In, OtherOut] =
+  def down[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Link[In, OtherOut] =
     andThen(other)(thisOutToOtherIn)
 
-  def andThen[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Linked[In, OtherOut] =
-    new Link[In, OtherOut] with LinkCombinedChain with Named {
-      val name = "~>"
-
-      val typeIn = Link.this.typeIn
-      val typeOut = other.typeOut
-
-      lazy val chain = chainTogether(Link.this.chain, other.chain)
-
+  def andThen[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Link[In, OtherOut] =
+    new Link.Build[In, OtherOut]("~>", Link.this.chain, other.chain, LinkCombinedChain.apply)(Link.this.typeIn, other.typeOut) {
       def apply[A, B](a: A)(implicit aToIn: A => In, outToB: OtherOut => B): B =
         other.apply(Link.this.apply(aToIn(a))(identity, thisOutToOtherIn))
     }
 
-  def <~[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Linked[OtherIn, Out] =
+  def <~[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Link[OtherIn, Out] =
     compose(other)(otherOutToThisIn)
 
-  def up[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Linked[OtherIn, Out] =
+  def up[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Link[OtherIn, Out] =
     compose(other)(otherOutToThisIn)
 
-  def compose[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Linked[OtherIn, Out] =
-    new Link[OtherIn, Out] with LinkCombinedChain with Named {
-      val name = "<~"
-
-      val typeIn = other.typeIn
-      val typeOut = Link.this.typeOut
-
-      lazy val chain = chainTogether(other.chain, Link.this.chain)
-
+  def compose[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Link[OtherIn, Out] =
+    new Link.Build[OtherIn, Out]("<~", other.chain, Link.this.chain, LinkCombinedChain.apply)(other.typeIn, Link.this.typeOut) {
       def apply[A, B](a: A)(implicit aToIn: A => OtherIn, outToB: Out => B): B =
         Link.this.apply(other.apply(aToIn(a))(identity, otherOutToThisIn))
     }
@@ -90,17 +76,23 @@ trait Link[In, Out] { this: LinkChainingStrategy with Named =>
 }
 
 object Link {
-  private abstract case class Build[In0, Out0](name: String = "Link", override val asShortString: String = null)(implicit val typeIn: TypeTagTree[In0], val typeOut: TypeTagTree[Out0]) extends LinkProvidedChain with Named with Link[In0, Out0] {
+  private[fluxmuster3] abstract case class Build[In, Out](name: String, mine: ChainLink, otherLink: ChainLink, chaining: FnChainLink, override val asShortString: String = null)(implicit val typeIn: TypeTagTree[In], val typeOut: TypeTagTree[Out]) extends Link[In, Out] with Named {
+    lazy val chain =
+      chainTogether(this, mine, otherLink)
+
+    def chainTogether(instance: ChainableLink, mine: ChainLink, other: ChainLink): ChainLink =
+      chaining(instance, mine, other)
   }
 
-  def apply[In, Out](fn: In => Out)(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Linked[In, Out] =
-    new Build[In, Out](fn.toString, s"${tIn.toShortString} => ${tOut.toShortString}")(tIn, tOut) {
-      lazy val chain = chainTogether(EmptyChainLink, EmptyChainLink)
+  def apply[In, Out](fn: In => Out)(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Link[In, Out] =
+    create(EmptyChainLink, EmptyChainLink, LinkProvidedChain.apply)(fn)(tIn, tOut)
 
+  def create[In, Out](mine: ChainLink, other: ChainLink, chaining: FnChainLink)(fn: In => Out)(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Link[In, Out] =
+    new Build[In, Out](fn.toString, mine, other, chaining, s"${tIn.toShortString} => ${tOut.toShortString}")(tIn, tOut) {
       def apply[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B =
         outToB(fn(aToIn(a)))
     }
 
-  def identity[A](implicit tA: TypeTagTree[A]): Linked[A, A] =
+  def identity[A](implicit tA: TypeTagTree[A]): Link[A, A] =
     (Predef.identity[A]_).toLink(tA, tA)
 }

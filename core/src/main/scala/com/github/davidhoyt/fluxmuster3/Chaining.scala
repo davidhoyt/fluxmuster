@@ -2,13 +2,13 @@ package com.github.davidhoyt.fluxmuster3
 
 import scala.collection._
 
-trait LinkChainingStrategy {
+trait LinkChaining {
   val chain: ChainLink
-  protected def chainTogether(mine: ChainLink, other: ChainLink): ChainLink
+  protected def chainTogether(instance: ChainableLink, mine: ChainLink, other: ChainLink): ChainLink
 }
 
-trait LinkCombinedChain extends LinkChainingStrategy {
-  protected def chainTogether(mine: ChainLink, other: ChainLink): ChainLink =
+object LinkCombinedChain {
+  def apply(instance: ChainableLink, mine: ChainLink, other: ChainLink): ChainLink =
     (mine ++ other).foldLeft(EmptyChainLink) {
       case (seq, p) if p.chain.nonEmpty =>
         seq :+ p.chain.head
@@ -17,10 +17,10 @@ trait LinkCombinedChain extends LinkChainingStrategy {
     }
 }
 
-trait LinkProvidedChain extends LinkChainingStrategy { self: ChainableLink =>
-  protected def chainTogether(mine: ChainLink, other: ChainLink): ChainLink =
+object LinkProvidedChain {
+  def apply(instance: ChainableLink, mine: ChainLink, other: ChainLink): ChainLink =
     if ((mine eq null) || mine.isEmpty)
-      immutable.Seq(self)
+      immutable.Seq(instance)
     else
       mine
 }

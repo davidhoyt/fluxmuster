@@ -182,8 +182,8 @@ import com.github.davidhoyt.fluxmuster.TypeTagTree
 //}
 
 object Fluxmuster3 extends App {
-  val link1: Linked[Long, String] = (x: Long) => x.toString
-  val link2: Linked[String, Long] = (x: String) => x.toLong
+  val link1: Link[Long, String] = (x: Long) => x.toString
+  val link2: Link[String, Long] = (x: String) => x.toLong
   val link1To2 = link1 ~> link2 ~> link1 ~> link2 ~> link1
   val link2To1 = link2 <~ link1 <~ link2 <~ link1 <~ link2
   val result = link1To2(111)

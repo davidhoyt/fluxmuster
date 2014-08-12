@@ -19,14 +19,14 @@ class BiDirectionalSpec extends UnitSpec {
 
   val linkStringIdentity = Link.identity[java.lang.String]
 
-  val link1: Linked[Int, String] = polyToString[Int]_
-  val link2: Linked[String, Int] = stringToInt _
-  val link3: Linked[Int, String] = link1 ~> link2 ~> link1 ~> link2 ~> link1
-  val link4: Linked[String, Seq[String]] = liftToSeq[String] _
-  val link5: Linked[Seq[String], String] = seqToHead[String] _
-  val link6: Linked[Int, Seq[String]] = link3 ~> link4
-  val link7: Linked[String, String] = link1 <~ link2 //<~ link1 <~ link2
-  val link8: Linked[String, Seq[String]] = link7 ~> link4
+  val link1: Link[Int, String] = polyToString[Int]_
+  val link2: Link[String, Int] = stringToInt _
+  val link3: Link[Int, String] = link1 ~> link2 ~> link1 ~> link2 ~> link1
+  val link4: Link[String, Seq[String]] = liftToSeq[String] _
+  val link5: Link[Seq[String], String] = seqToHead[String] _
+  val link6: Link[Int, Seq[String]] = link3 ~> link4
+  val link7: Link[String, String] = link1 <~ link2 //<~ link1 <~ link2
+  val link8: Link[String, Seq[String]] = link7 ~> link4
 
   it should "have a proper toString()" in {
     BiDirectional("BiDi1").toString should be (s"${Macros.simpleNameOf[EmptyBiDirectional.type]}(BiDi1)")

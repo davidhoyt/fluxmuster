@@ -27,7 +27,7 @@ class LinkSpec extends UnitSpec {
   }
 
   it should "properly compose a series of upstream function links" in {
-    val link1: Linked[Int, Seq[Long]] = ((x: Long) => Seq(x)) up ((x: String) => x.toLong) <~ createString[Int]_
+    val link1: Link[Int, Seq[Long]] = ((x: Long) => Seq(x)) up ((x: String) => x.toLong) <~ createString[Int]_
 
     val result =
       for (i <- 0 to 10)

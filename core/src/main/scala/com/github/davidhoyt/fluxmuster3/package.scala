@@ -7,14 +7,11 @@ package object fluxmuster3 {
 
   import scala.language.implicitConversions
 
-  type Linked[In, Out] =
+  type Downstream[In, Out] =
     Link[In, Out]
 
-  type Downstream[In, Out] =
-    Linked[In, Out]
-
   type Upstream[In, Out] =
-    Linked[In, Out]
+    Link[In, Out]
 
   type BiDi[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] =
     BiDirectional[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
@@ -31,23 +28,29 @@ package object fluxmuster3 {
   type ChainBiDi = immutable.Seq[ChainableBiDi]
   val EmptyChainBiDi = immutable.Seq[ChainableBiDi]()
 
+  type FnChainLink =
+    (ChainableLink, ChainLink, ChainLink) => ChainLink
+
+  type FnChainBiDi =
+    (ChainableBiDi, ChainBiDi, ChainBiDi) => ChainBiDi
+
   implicit object FutureConverter extends (Future -> Future) {
     implicit def apply[A](f: Future[A]): Future[A] = f
   }
 
-  implicit class LinkEnhancements[In0, Out0](val link: Link[In0, Out0]) extends AnyVal {
-    def toLinked: Linked[In0, Out0] =
-      link.asInstanceOf[Linked[In0, Out0]]
+  implicit class LinkEnhancements[In, Out](val link: Link[In, Out]) extends AnyVal {
+    def toLink: Link[In, Out] =
+      link
   }
 
   implicit class FunctionEnhancements[In, Out](val fn: In => Out) extends AnyVal {
-    def toLink(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Linked[In, Out] =
+    def toLink(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Link[In, Out] =
       Link(fn)
 
-    def link[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit proofMyOutputCanBeOtherIn: Out => OtherIn, tIn: TypeTagTree[In], tOut: TypeTagTree[Out], tOtherOut: TypeTagTree[OtherOut]): Linked[In, OtherOut] =
+    def link[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit proofMyOutputCanBeOtherIn: Out => OtherIn, tIn: TypeTagTree[In], tOut: TypeTagTree[Out], tOtherOut: TypeTagTree[OtherOut]): Link[In, OtherOut] =
       toLink(tIn, tOut).andThen(other)(proofMyOutputCanBeOtherIn)
   }
 
-  implicit def functionToLink[In, Out](fn: In => Out)(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Linked[In, Out] =
+  implicit def functionToLink[In, Out](fn: In => Out)(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Link[In, Out] =
     fn.toLink(tIn, tOut)
 }
