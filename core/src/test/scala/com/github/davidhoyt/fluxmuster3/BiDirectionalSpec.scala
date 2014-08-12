@@ -53,5 +53,12 @@ class BiDirectionalSpec extends UnitSpec {
     b3.downstream.chain should be (b1.downstream.chain)
     b3.upstream.chain should be (link5 +: b2.upstream.chain)
     b3(0) should be ("0")
+
+    val b4 = BiDirectional("BiDi4") ~> link5 ~> link2
+    println(b4)
+    val b5 = BiDirectional.create("BiDi5")(link5 ~> link2)(link4 <~ link3)
+    val b6 = b3 combine b5
+    println(b5)
+
   }
 }

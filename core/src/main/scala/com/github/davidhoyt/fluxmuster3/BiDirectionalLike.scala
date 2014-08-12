@@ -4,11 +4,7 @@ object BiDirectionalLike {
   type Dependencies = Named
 }
 
-trait BiDirectionalLike { self: BiDirectionalLike.Dependencies =>
-  type DownstreamIn
-  type DownstreamOut
-  type UpstreamIn
-  type UpstreamOut
+trait BiDirectionalLike[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] { self: BiDirectionalLike.Dependencies =>
 
   val downstream: Downstream[DownstreamIn, DownstreamOut]
   val upstream: Upstream[UpstreamIn, UpstreamOut]
@@ -16,8 +12,18 @@ trait BiDirectionalLike { self: BiDirectionalLike.Dependencies =>
   def asShortString: String =
     null
 
-  val asDefaultString =
-    s"$name[${self.downstream.typeIn.toShortString}, ${self.downstream.typeOut.toShortString}, ${self.upstream.typeIn.toShortString}, ${self.upstream.typeOut.toShortString}]"
+  val asDefaultString = {
+    val up = Option(self.upstream)
+    val down = Option(self.downstream)
+
+    val upIn = up map (_.typeIn.toShortString) getOrElse "<unknown>"
+    val upOut = up map (_.typeOut.toShortString) getOrElse "<unknown>"
+
+    val downIn = down map (_.typeIn.toShortString) getOrElse "<unknown>"
+    val downOut = down map (_.typeOut.toShortString) getOrElse "<unknown>"
+
+    s"$name[$downIn, $downOut, $upIn, $upOut]"
+  }
 
   val toShortString = {
     val short = asShortString
@@ -35,7 +41,7 @@ trait BiDirectionalLike { self: BiDirectionalLike.Dependencies =>
 
   override def equals(other: Any): Boolean = other match {
     case ref: AnyRef if ref eq this => true
-    case ref: BiDirectionalLike if ref.downstream == downstream && ref.upstream == upstream => true
+    case ref: BiDirectionalLike[_, _, _, _] if ref.downstream == downstream && ref.upstream == upstream => true
     case _ => false
   }
 }

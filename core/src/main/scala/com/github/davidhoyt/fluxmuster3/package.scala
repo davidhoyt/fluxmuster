@@ -3,46 +3,39 @@ package com.github.davidhoyt
 package object fluxmuster3 {
   import scala.collection._
   import scala.concurrent.Future
-  import com.github.davidhoyt.fluxmuster.{Macros, TypeTagTree}
+  import com.github.davidhoyt.fluxmuster.TypeTagTree
 
   import scala.language.implicitConversions
 
-  type Linked[-In0, +Out0] =
-    Link {
-      type In >: In0
-      type Out <: Out0
-    }
+  type Linked[In, Out] =
+    Link[In, Out]
 
-  type Downstream[-In, +Out] = Linked[_ >: In, _ <: Out]
-  type Upstream[-In, +Out] = Linked[_ >: In, _ <: Out]
+  type Downstream[In, Out] =
+    Linked[In, Out]
 
-  type BiDi[-DownstreamIn0, +DownstreamOut0, -UpstreamIn0, +UpstreamOut0] =
-    BiDirectional {
-      type DownstreamIn >: DownstreamIn0
-      type DownstreamOut <: DownstreamOut0
-      type UpstreamIn >: UpstreamIn0
-      type UpstreamOut <: UpstreamOut0
-    }
+  type Upstream[In, Out] =
+    Linked[In, Out]
 
-  type SimpleStep[-InDownstream, +OutDownstream, -InUpstream, +OutUpstream] =
-    StepLike with StepConnections with BiDi[InDownstream, OutDownstream, InUpstream, OutUpstream]
+  type BiDi[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] =
+    BiDirectional[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
 
-  type ChainLink = immutable.Seq[Link]
-  val EmptyChainLink = immutable.Seq[Link]()
+  type ChainableLink =
+    Link[_, _]
 
-//  type Downstream[-In, +Out] = In => Out
-//  type Upstream[-In, +Out] = In => Out
-//
-//  type SimpleStep[A, B, C, D] = StepLike[A, B, C, D] with Runner[A, B, C, D, Downstream[A, B], Upstream[C, D]] with StepConnections
-//
-//  type Connections = immutable.Seq[SimpleStep[_, _, _, _]]
-//  val EmptyConnections = immutable.Seq[SimpleStep[_, _, _, _]]()
+  type ChainableBiDi =
+    BiDirectionalLike[_, _, _, _] with BiDirectionalRun[_, _, _, _] with BiDirectionalChaining with Named
+
+  type ChainLink = immutable.Seq[ChainableLink]
+  val EmptyChainLink = immutable.Seq[ChainableLink]()
+
+  type ChainBiDi = immutable.Seq[ChainableBiDi]
+  val EmptyChainBiDi = immutable.Seq[ChainableBiDi]()
 
   implicit object FutureConverter extends (Future -> Future) {
     implicit def apply[A](f: Future[A]): Future[A] = f
   }
 
-  implicit class LinkEnhancements[In0, Out0](val link: Link { type In = In0; type Out = Out0 }) extends AnyVal {
+  implicit class LinkEnhancements[In0, Out0](val link: Link[In0, Out0]) extends AnyVal {
     def toLinked: Linked[In0, Out0] =
       link.asInstanceOf[Linked[In0, Out0]]
   }
@@ -51,7 +44,7 @@ package object fluxmuster3 {
     def toLink(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Linked[In, Out] =
       Link(fn)
 
-    def link[OtherIn, OtherOut](other: Link { type In = OtherIn; type Out = OtherOut })(implicit proofMyOutputCanBeOtherIn: Out => other.In, tIn: TypeTagTree[In], tOut: TypeTagTree[Out], tOtherOut: TypeTagTree[OtherOut]): Linked[In, OtherOut] =
+    def link[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit proofMyOutputCanBeOtherIn: Out => OtherIn, tIn: TypeTagTree[In], tOut: TypeTagTree[Out], tOtherOut: TypeTagTree[OtherOut]): Linked[In, OtherOut] =
       toLink(tIn, tOut).andThen(other)(proofMyOutputCanBeOtherIn)
   }
 

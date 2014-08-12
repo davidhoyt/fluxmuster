@@ -3,39 +3,39 @@ package com.github.davidhoyt.fluxmuster3
 import com.github.davidhoyt.fluxmuster.TypeTagTree
 
 
-object StepLike {
-  type Dependencies = BiDirectional with Named
-}
-
-trait StepLike { self: StepLike.Dependencies =>
-  def asShortString: String =
-    null
-
-  val asDefaultString =
-    s"$name[${self.downstream.typeIn.toShortString}, ${self.downstream.typeOut.toShortString}, ${self.upstream.typeIn.toShortString}, ${self.upstream.typeOut.toShortString}]"
-
-  val toShortString = {
-    val short = asShortString
-    if (short ne null)
-      short
-    else
-      asDefaultString
-  }
-
-  override def toString =
-    toShortString
-}
-
-trait StepConnections {
-  //
-  val foo = BiDirectional
-              (identity[Int]_ ~> identity[Int]_)
-              (identity[Int]_ ~> identity[Int]_)
-}
-
-trait Step /*extends StepLike[A, B, C, D] with Runner[A, B, C, D, LinkDownstream, LinkUpstream] with StepConnections*/ {
-
-}
+//object StepLike {
+//  type Dependencies = BiDirectional with Named
+//}
+//
+//trait StepLike { self: StepLike.Dependencies =>
+//  def asShortString: String =
+//    null
+//
+//  val asDefaultString =
+//    s"$name[${self.downstream.typeIn.toShortString}, ${self.downstream.typeOut.toShortString}, ${self.upstream.typeIn.toShortString}, ${self.upstream.typeOut.toShortString}]"
+//
+//  val toShortString = {
+//    val short = asShortString
+//    if (short ne null)
+//      short
+//    else
+//      asDefaultString
+//  }
+//
+//  override def toString =
+//    toShortString
+//}
+//
+//trait StepConnections {
+//  //
+//  val foo = BiDirectional
+//              (identity[Int]_ ~> identity[Int]_)
+//              (identity[Int]_ ~> identity[Int]_)
+//}
+//
+//trait Step /*extends StepLike[A, B, C, D] with Runner[A, B, C, D, LinkDownstream, LinkUpstream] with StepConnections*/ {
+//
+//}
 
 //trait MyUpstream[-In, +Out] {
 //  def apply[A >: In, B <: Out](a: A): B

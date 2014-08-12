@@ -2,11 +2,16 @@ package com.github.davidhoyt.fluxmuster3
 
 import com.github.davidhoyt.fluxmuster.{Macros, TypeTagTree}
 
+import scala.collection.immutable
+
 object BiDirectionalDsl {
-  type Dependencies = BiDirectionalLike with Named
+  type Dependencies[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] =
+    BiDirectionalLike[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] with BiDirectionalChaining with Named
 }
 
-trait BiDirectionalDsl { self: BiDirectionalDsl.Dependencies =>
+trait BiDirectionalDsl[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] {
+  self: BiDirectionalDsl.Dependencies[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] =>
+
   def ~>[A, B](linked: Linked[A, B])(implicit proofDownstreamOutCanRouteToLinkedIn: DownstreamOut => A): BiDi[DownstreamIn, B, UpstreamIn, UpstreamOut] =
     down(linked)
 
@@ -19,15 +24,29 @@ trait BiDirectionalDsl { self: BiDirectionalDsl.Dependencies =>
   def up[A, B](linked: Linked[A, B])(implicit proofLinkedOutCanRouteToUpstreamIn: B => UpstreamIn): BiDi[DownstreamIn, DownstreamOut, A, UpstreamOut] =
     BiDirectional.create(name)(downstream)(upstream.compose(linked)(proofLinkedOutCanRouteToUpstreamIn))
 
-  def combine[A, B, C, D](other: BiDi[A, B, C, D]): BiDi[DownstreamIn, B, C, UpstreamOut] =
-    ???
+//  protected def combineChains(mine: ChainBiDi, other: ChainBiDi): ChainBiDi =
+//    (mine ++ other).foldLeft(EmptyChainBiDi) {
+//      case (seq, p) if p.chain.nonEmpty =>
+//        seq :+ p.chain.head
+//      case (seq, _) =>
+//        seq
+//    }
+
+  def combine[A, B, C, D](other: BiDi[A, B, C, D])(implicit connect: DownstreamOut => A, connect2: D => UpstreamIn): BiDi[DownstreamIn, B, C, UpstreamOut] = {
+    val foo = BiDirectional.createCombined[DownstreamIn, B, C, UpstreamOut](chain, other.chain)(null)(null)
+//    val combinedChain =
+    foo
+  }
 }
 
 object BiDirectionalRun {
-  type Dependencies = BiDirectionalLike
+  type Dependencies[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] =
+    BiDirectionalLike[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
 }
 
-trait BiDirectionalRun { self: BiDirectionalRun.Dependencies =>
+trait BiDirectionalRun[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] {
+  self: BiDirectionalRun.Dependencies[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] =>
+
   def apply[E, F >: DownstreamOut, G <: UpstreamIn](e: E)(implicit proofDownstreamCanRouteToUpstream: F => G, mapToIn: E => DownstreamIn): UpstreamOut =
     run(e)
 
@@ -35,7 +54,14 @@ trait BiDirectionalRun { self: BiDirectionalRun.Dependencies =>
     upstream(proofDownstreamCanRouteToUpstream(downstream.apply(e)(mapToIn, identity)))
 }
 
-trait BiDirectional extends BiDirectionalLike with BiDirectionalDsl with BiDirectionalRun with Named
+trait BiDirectional[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
+  extends BiDirectionalLike[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
+  with BiDirectionalDsl[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
+  with BiDirectionalRun[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
+  with BiDirectionalChaining {
+  self: Named =>
+
+}
 
 object EmptyBiDirectional {
   private case class Build(name: String) extends EmptyBiDirectional {
@@ -62,11 +88,11 @@ trait EmptyBiDirectional extends Named {
 }
 
 object BiDirectional {
-  private case class Build[A, B, C, D](name: String, downstream: Downstream[A, B], upstream: Upstream[C, D]) extends Named with BiDirectional {
-    type DownstreamIn  = A
-    type DownstreamOut = B
-    type UpstreamIn    = C
-    type UpstreamOut   = D
+  private case class Build[A, B, C, D](name: String, downstream: Downstream[A, B], upstream: Upstream[C, D], mine: ChainBiDi, other: ChainBiDi)(val chaining: (ChainableBiDi, ChainBiDi, ChainBiDi) => ChainBiDi) extends BiDirectional[A, B, C, D] with Named {
+    lazy val chain = chainTogether(this, mine, other)
+
+    def chainTogether(instance: ChainableBiDi, mine: ChainBiDi, other: ChainBiDi): ChainBiDi =
+      chaining(instance, mine, other)
 
     override def toString =
       s"${Macros.simpleNameOf[BiDirectional.type]}($name)[${downstream.typeIn.toShortString}, ${downstream.typeOut.toShortString}, ${upstream.typeIn.toShortString}, ${upstream.typeOut.toShortString}]"
@@ -82,7 +108,13 @@ object BiDirectional {
     create(Macros.simpleNameOf[BiDirectional.type])(downstream)(upstream)
 
   def create[A, B, C, D](name: String)(downstream: Downstream[A, B])(upstream: Upstream[C, D]): BiDi[A, B, C, D] =
-    Build[A, B, C, D](name, downstream, upstream)
+    Build[A, B, C, D](name, downstream, upstream, EmptyChainBiDi, EmptyChainBiDi)(BiDirectionalProvidedChain.apply)
+
+  def createCombined[A, B, C, D](mine: ChainBiDi, other: ChainBiDi)(downstream: Downstream[A, B])(upstream: Upstream[C, D]): BiDi[A, B, C, D] =
+    createCombined(Macros.simpleNameOf[BiDirectional.type])(mine, other)(downstream)(upstream)
+
+  def createCombined[A, B, C, D](name: String)(mine: ChainBiDi, other: ChainBiDi)(downstream: Downstream[A, B])(upstream: Upstream[C, D]): BiDi[A, B, C, D] =
+    Build[A, B, C, D](name, downstream, upstream, mine, other)(BiDirectionalCombinedChain.apply)
 
   def apply(name: String): EmptyBiDirectional =
     EmptyBiDirectional(name)
