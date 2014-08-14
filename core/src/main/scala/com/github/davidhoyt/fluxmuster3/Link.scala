@@ -10,7 +10,7 @@ import com.github.davidhoyt.fluxmuster.TypeTagTree
  * information recorded for runtime reflection and all composed links are
  * tracked as a chain.
  */
-trait Link[In, Out] extends LinkChaining { self: Named =>
+trait Link[In, Out] extends LinkChaining with ChainRun[In, Out, Out, Out] { self: Named =>
   import scala.collection._
 
   implicit val typeIn: TypeTagTree[In]
@@ -37,8 +37,20 @@ trait Link[In, Out] extends LinkChaining { self: Named =>
   override def toString =
     toShortString
 
+  implicit lazy val toFunction: In => Out =
+    (in: In) => apply(in)(identity, identity)
+
   def asFunction[A, B](implicit aToIn: A => In, outToB: Out => B): A => B =
     (a: A) => apply(aToIn(a))(identity, outToB)
+
+  def runUpChain(in: Out): Out =
+    identity(in)
+
+  def runDownChain(in: In): Out =
+    apply(in)(identity, identity)
+
+  def routeDownToUp(in: Out): Out =
+    identity(in)
 
   def ~>[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Link[In, OtherOut] =
     andThen(other)(thisOutToOtherIn)
