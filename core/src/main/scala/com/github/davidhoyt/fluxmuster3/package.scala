@@ -21,10 +21,23 @@ package object fluxmuster3 {
     Link[_, _]
 
   type ChainableStep =
-    StepLike[_, _, _, _] with StepRun[_, _, _, _] with StepChaining with ChainRun[_, _, _, _] with Named
+    StepLike[_, _, _, _] with StepRun[_, _, _, _] with StepChaining with Named
+
+  //A chain should just be a flat set of Link[_, _] but then care must be taken
+  //when combining 2 steps
+  //If I have: Step(Seq(A ~> B, C ~> D)), Step(Seq(B ~> G, H ~> C)) should get Seq(A ~> B, B ~> G, G ~> H <implicit proof>, H ~> C, C ~> D)
+  //What does that look like recursively?
+  //
+  //def chain() on a combined step of a combined step -- how would that look? It should be flat by the end.
+  //
+  //Lifts simply encapsulate a chain. Steps are a way to combine downstream and upstream chains.
+  //
+  //Simply formulate the chain correctly and then lift operates entirely on chains of *links*
+  //
+  //Have upstream/downstream chains for step that are then "zipped" for a lazy val chain
 
   type ChainableLift =
-    ChainRun[_, _, _, _]
+    ChainableStep //ChainRun[_, _, _, _]
 
   type ChainLink = immutable.Seq[ChainableLink]
   val EmptyChainLink = immutable.Seq[ChainableLink]()
@@ -32,8 +45,8 @@ package object fluxmuster3 {
   type ChainStep = immutable.Seq[ChainableStep]
   val EmptyChainStep = immutable.Seq[ChainableStep]()
 
-  type ChainLift = immutable.Seq[ChainableLift]
-  val EmptyChainLift = immutable.Seq[ChainableLift]()
+  type ChainLift = ChainStep // immutable.Seq[ChainableLift]
+  val EmptyChainLift = EmptyChainStep // immutable.Seq[ChainableLift]()
 
   type FnChainLink =
     (ChainableLink, ChainLink, ChainLink) => ChainLink
@@ -84,36 +97,36 @@ package object fluxmuster3 {
     }
   }
 
-  implicit object FutureLiftOps extends LiftOps[ExecutionContext, Future] {
-    import scala.concurrent.{Promise, future}
-    import scala.util.control.NonFatal
-
-    def liftRunner[A, B, C, D](runner: ChainRun[A, B, C, D])(implicit ec: ExecutionContext, chain: ChainLift, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] =
-      (a: A) =>
-        future {
-          runner.runChain(a)
-        }
-
-    def point[A](given: => A)(implicit ec: ExecutionContext): Future[A] =
-      try Future.successful(given)
-      catch {
-        case NonFatal(error) =>
-          Future.failed(error)
-      }
-
-    def map[A, B](given: Future[A])(fn: A => B)(implicit ec: ExecutionContext): Future[B] =
-      given.map(fn)(ec)
-
-    def flatten[A](given: Future[Future[A]])(implicit ec: ExecutionContext): Future[A] = {
-      import scala.util._
-      val p = Promise[A]()
-      given.onComplete {
-        case Success(next) =>
-          p.completeWith(next)
-        case Failure(t) =>
-          p.failure(t)
-      }
-      p.future
-    }
-  }
+//  implicit object FutureLiftOps extends LiftOps[ExecutionContext, Future] {
+//    import scala.concurrent.{Promise, future}
+//    import scala.util.control.NonFatal
+//
+//    def liftRunner[A, B, C, D](runner: ChainRun[A, B, C, D])(implicit ec: ExecutionContext, chain: ChainLift, typeAccept: TypeTagTree[A], typeResult: TypeTagTree[D]): A => Future[D] =
+//      (a: A) =>
+//        future {
+//          runner.runChain(a)
+//        }
+//
+//    def point[A](given: => A)(implicit ec: ExecutionContext): Future[A] =
+//      try Future.successful(given)
+//      catch {
+//        case NonFatal(error) =>
+//          Future.failed(error)
+//      }
+//
+//    def map[A, B](given: Future[A])(fn: A => B)(implicit ec: ExecutionContext): Future[B] =
+//      given.map(fn)(ec)
+//
+//    def flatten[A](given: Future[Future[A]])(implicit ec: ExecutionContext): Future[A] = {
+//      import scala.util._
+//      val p = Promise[A]()
+//      given.onComplete {
+//        case Success(next) =>
+//          p.completeWith(next)
+//        case Failure(t) =>
+//          p.failure(t)
+//      }
+//      p.future
+//    }
+//  }
 }

@@ -43,8 +43,8 @@ class LiftSpec extends UnitSpec {
     //then combine then later.
     val s1 = Step.create("Step1")(linkIntToString ~> ((x: String) => "1" + x) ~> linkLiftToSeqString)(linkStringToInt <~ linkHeadSeqString)
     val s2 = ((x: Seq[String]) => x.head.toInt * 2).toStep
-    val l1 = Async(s1)
-    val r1 = l1(0)
-    println(Await.result(r1, 10.seconds))
+//    val l1 = Async(s1)
+//    val r1 = l1(0)
+//    println(Await.result(r1, 10.seconds))
   }
 }

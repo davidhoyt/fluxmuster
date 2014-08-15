@@ -35,8 +35,8 @@ object StepRun {
     StepLike[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
 }
 
-trait StepRun[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
-  extends ChainRun[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] {
+trait StepRun[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] {
+  //extends ChainRun[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] {
   self: StepRun.Dependencies[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] =>
 
   val proofDownstreamCanRouteToUpstream: DownstreamOut => UpstreamIn
@@ -55,14 +55,14 @@ trait StepRun[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
   implicit def createLink[E, F >: DownstreamOut, G <: UpstreamIn](implicit addlProofDownstreamCanRouteToUpstream: F => G, mapToIn: E => DownstreamIn, tE: TypeTagTree[E]): Link[E, UpstreamOut] =
     Link((e: E) => upstream(addlProofDownstreamCanRouteToUpstream(downstream.apply(e)(mapToIn, identity))))(tE, upstream.typeOut)
 
-  def routeDownToUp(in: DownstreamOut): UpstreamIn =
-    proofDownstreamCanRouteToUpstream(in)
-
-  def runDownChain(in: DownstreamIn): DownstreamOut =
-    downstream(in)
-
-  def runUpChain(in: UpstreamIn): UpstreamOut =
-    upstream(in)
+//  def routeDownToUp(in: DownstreamOut): UpstreamIn =
+//    proofDownstreamCanRouteToUpstream(in)
+//
+//  def runDownChain(in: DownstreamIn): DownstreamOut =
+//    downstream(in)
+//
+//  def runUpChain(in: UpstreamIn): UpstreamOut =
+//    upstream(in)
 }
 
 trait Step[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
