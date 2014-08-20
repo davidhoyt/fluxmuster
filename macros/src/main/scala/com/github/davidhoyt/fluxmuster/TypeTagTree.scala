@@ -133,6 +133,10 @@ sealed trait TypeTagTree[T] {
 object TypeTagTree {
   import scala.language.experimental.macros
 
+  /** Materializes an instance of a [[TypeTagTree]] for the provided type `T`. */
+  def typeTagTreeOf[T](implicit ttt: TypeTagTree[T]): TypeTagTree[T] =
+    ttt
+
   /**
    * The use of `implicit def` is to behave similar to [[scala.reflect.api.TypeTags.TypeTag]] in that the compiler
    * will call our macro to conjure an instance when needed.

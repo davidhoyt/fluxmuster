@@ -41,6 +41,8 @@ libraryDependencies ++= Seq(
   "mysql" % "mysql-connector-java" % "5.1.31",
   "net.jpountz.lz4" % "lz4" % "1.2.0",
   "net.sf.ehcache" % "ehcache-core" % "2.6.9",
-  "org.xerial.snappy" % "snappy-java" % "1.1.0.1"
+  "org.xerial.snappy" % "snappy-java" % "1.1.0.1",
+  //
+  "org.scalacheck" %% "scalacheck" % "1.11.5"
 )
 

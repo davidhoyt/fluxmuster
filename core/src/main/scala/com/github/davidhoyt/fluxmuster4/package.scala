@@ -54,4 +54,7 @@ package object fluxmuster4 {
 
   implicit def functionToLink[In, Out](fn: In => Out)(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Link[In, Out] =
     fn.toLink(tIn, tOut)
+
+  def typeTagTreeOf[T](implicit ttt: TypeTagTree[T]) =
+    TypeTagTree.typeTagTreeOf[T](ttt)
 }

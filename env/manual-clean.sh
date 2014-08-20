@@ -3,7 +3,7 @@
 modules="."
 
 toplevel=".idea .idea_modules"
-moduleSubdirs="target project/project project/target"
+moduleSubdirs="target project/project project/target core/target macros/target"
 
 restore=".idea/runConfigurations"
 

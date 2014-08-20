@@ -23,7 +23,7 @@ class LinkSpec extends UnitSpec {
         yield Seq(i)
 
     result should be (expected)
-    link1.chain.length should be (5)
+    link1.chain.length should be (4)
   }
 
   it should "properly compose a series of upstream function links" in {
@@ -38,8 +38,10 @@ class LinkSpec extends UnitSpec {
         yield Seq(i)
 
     result should be (expected)
-    //It includes implicit conversions between links which are often just identity (no conversion).
-    link1.chain.length should be (5)
+    //It includes implicit conversions between links. If the conversion would be an identity
+    //(which would occur when the output type of link A is the input type of link B), then
+    //those are discarded in order to reduce the length of the chain.
+    link1.chain.length should be (4)
   }
 
   it should "step" in {

@@ -65,7 +65,7 @@ trait Link[In, Out] extends Chained { self: Named =>
     andThen(Link(other)(tOtherIn, tOtherOut))(thisOutToOtherIn)
 
   def andThen[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Link[In, OtherOut] =
-    new Link.Build[In, OtherOut]("~>", Link.this.chain :+ Link(thisOutToOtherIn)(Link.this.typeOut, other.typeIn), other.chain, Link.linkCombined)(Link.this.typeIn, other.typeOut) {
+    new Link.Build[In, OtherOut]("~>", Link.this.chain ++ (if (Link.this.typeOut != other.typeIn) Seq(Link(thisOutToOtherIn)(Link.this.typeOut, other.typeIn)) else Seq()), other.chain, Link.linkCombined)(Link.this.typeIn, other.typeOut) {
       def apply[A, B](a: A)(implicit aToIn: A => In, outToB: OtherOut => B): B =
         other.apply(Link.this.apply(aToIn(a))(identity, thisOutToOtherIn))
     }
@@ -86,7 +86,7 @@ trait Link[In, Out] extends Chained { self: Named =>
     compose(Link(other)(tOtherIn, tOtherOut))(otherOutToThisIn)
 
   def compose[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Link[OtherIn, Out] =
-    new Link.Build[OtherIn, Out]("<~", other.chain :+ Link(otherOutToThisIn)(other.typeOut, Link.this.typeIn), Link.this.chain, Link.linkCombined)(other.typeIn, Link.this.typeOut) {
+    new Link.Build[OtherIn, Out]("<~", other.chain ++ (if (other.typeOut != Link.this.typeIn) Seq(Link(otherOutToThisIn)(other.typeOut, Link.this.typeIn)) else Seq()), Link.this.chain, Link.linkCombined)(other.typeIn, Link.this.typeOut) {
       def apply[A, B](a: A)(implicit aToIn: A => OtherIn, outToB: Out => B): B =
         Link.this.apply(other.apply(aToIn(a))(identity, otherOutToThisIn))
     }
