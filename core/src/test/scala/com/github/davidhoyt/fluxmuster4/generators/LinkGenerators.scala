@@ -24,32 +24,32 @@ object LinkGenerators {
     Types.Int ->
       Links(0, Vector(
         Link("identity")(identity[Int] _),
-        Link("int2String")(Implicits.int2String _),
-        Link("int2Long")(Implicits.int2Long _),
-        Link("int2Double")(Implicits.int2Double _)
+        Link("int2String")(Functions.int2String _),
+        Link("int2Long")(Functions.int2Long _),
+        Link("int2Double")(Functions.int2Double _)
       )),
     Types.Long ->
       Links(0L, Vector(
         Link("identity")(identity[Long] _),
-        Link("long2String")(Implicits.long2String _),
-        Link("long2Int")(Implicits.long2Int _),
-        Link("long2Double")(Implicits.long2Double _)
+        Link("long2String")(Functions.long2String _),
+        Link("long2Int")(Functions.long2Int _),
+        Link("long2Double")(Functions.long2Double _)
       )),
     Types.Double ->
       Links(0.0D, Vector(
         Link("identity")(identity[Double] _),
-        Link("double2Int")(Implicits.double2Int _),
-        Link("double2Long")(Implicits.double2Long _)
+        Link("double2Int")(Functions.double2Int _),
+        Link("double2Long")(Functions.double2Long _)
       )),
     Types.String ->
       Links("0", Vector(
         Link("identity")(identity[String] _),
-        Link("string2Int")(Implicits.string2Int _),
-        Link("string2Long")(Implicits.string2Long _)
+        Link("string2Int")(Functions.string2Int _),
+        Link("string2Long")(Functions.string2Long _)
       ))
   ).toIndexedSeq
 
-  object Implicits {
+  object Functions {
     def int2Long(x: Int) = x.toLong
     def int2Double(x: Int) = x.toDouble
     def int2String(x: Int) = x.toString
@@ -82,9 +82,9 @@ object LinkGenerators {
   def combineRandomLink(link: Link[Any, Any]): Link[Any, Any] =
     link ~> randomLink(link.typeOut)
 
-  val genLink: Gen[GeneratedLink] =
+  def genLink(maxChainSize: Int = 20): Gen[GeneratedLink] =
     for {
-      iNumberLinks <- Gen.choose(1, 20)
+      iNumberLinks <- Gen.choose(1, maxChainSize)
       (startDefault, startType) = randomType
       startLink = randomLink(startType)
     } yield {
@@ -97,5 +97,5 @@ object LinkGenerators {
     }
 
   implicit val arbitraryGeneratedLink =
-    Arbitrary[GeneratedLink](genLink)
+    Arbitrary[GeneratedLink](genLink())
 }

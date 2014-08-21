@@ -15,8 +15,6 @@ object LinkSpecification extends Properties(Macros.simpleNameOf[Link.type]) {
     val resultFromRun    = link.run(default)
     val resultFromRunAny = link.runAny(default)
 
-    println(link.chain.map(_.asDefaultString))
-
     validChainSize && (resultFromApply == resultFromRun) && (resultFromApply == resultFromRunAny)
   }
 
