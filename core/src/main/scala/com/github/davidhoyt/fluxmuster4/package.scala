@@ -15,10 +15,14 @@ package object fluxmuster4 {
     Link[In, Out]
 
   type ChainableLink =
-    Link[_, _]
+    Chained[_, _]
 
-  type ChainLink = immutable.Seq[ChainableLink]
-  val EmptyChainLink = immutable.Seq[ChainableLink]()
+  type ChainLink = immutable.Vector[ChainableLink]
+  val EmptyChainLink = immutable.Vector[ChainableLink]()
+
+  type SideEffecting[Out] = Out => Unit
+  type ChainSideEffects[Out] = immutable.Vector[SideEffecting[Out]]
+  def EmptyChainSideEffects[Out] = immutable.Vector[SideEffecting[Out]]()
 
   type FnChainLink =
     (ChainableLink, ChainLink, ChainLink) => ChainLink
@@ -55,6 +59,47 @@ package object fluxmuster4 {
   implicit def functionToLink[In, Out](fn: In => Out)(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Link[In, Out] =
     fn.toLink(tIn, tOut)
 
+  implicit class ChainLinkEnhancements(val chainLink: ChainLink) extends AnyVal {
+    def asDefaultString =
+      chainLink.map(_.asDefaultString).mkString(", ")
+
+    def asShortString =
+      chainLink.map(_.asShortString).mkString(", ")
+  }
+
   def typeTagTreeOf[T](implicit ttt: TypeTagTree[T]) =
     TypeTagTree.typeTagTreeOf[T](ttt)
+
+  implicit object FutureLiftOps extends LiftOps[ExecutionContext, Future] {
+    import scala.concurrent.{Promise, future}
+    import scala.util.control.NonFatal
+
+    def liftRunner[A, D](chain: ChainLink, runner: A => D)(implicit ec: ExecutionContext, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] =
+      (a: A) =>
+        future {
+          runner(a)
+        }
+
+    def point[A](given: => A)(implicit ec: ExecutionContext): Future[A] =
+      try Future.successful(given)
+      catch {
+        case NonFatal(error) =>
+          Future.failed(error)
+      }
+
+    def map[A, B](given: Future[A])(fn: A => B)(implicit ec: ExecutionContext): Future[B] =
+      given.map(fn)(ec)
+
+    def flatten[A](given: Future[Future[A]])(implicit ec: ExecutionContext): Future[A] = {
+      import scala.util._
+      val p = Promise[A]()
+      given.onComplete {
+        case Success(next) =>
+          p.completeWith(next)
+        case Failure(t) =>
+          p.failure(t)
+      }
+      p.future
+    }
+  }
 }

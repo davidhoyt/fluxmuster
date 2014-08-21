@@ -9,7 +9,7 @@ trait StepLike[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] extends Nam
   def withProof(implicit proofDownstreamCanMapToUpstream: DownstreamOut => UpstreamIn, tOut: TypeTagTree[DownstreamOut], tIn: TypeTagTree[UpstreamIn]): Step[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] =
     Step(name, downstream, upstream, proofDownstreamCanMapToUpstream)(tOut, tIn)
 
-  def run[A](in: A)(implicit proofDownstreamCanMapToUpstream: DownstreamOut => UpstreamIn, convertIn: A => DownstreamIn): UpstreamOut = {
+  def runStep[A](in: A)(implicit proofDownstreamCanMapToUpstream: DownstreamOut => UpstreamIn, convertIn: A => DownstreamIn): UpstreamOut = {
     val down = downstream.toFunction
     val up = upstream.toFunction
     val composed = up compose proofDownstreamCanMapToUpstream compose down compose convertIn
@@ -61,20 +61,39 @@ trait StepLike[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] extends Nam
 
 trait Step[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
   extends StepLike[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
-  with Chained {
+  with Chained[DownstreamIn, UpstreamOut] {
 
   implicit val proofDownstreamCanMapToUpstream: Link[DownstreamOut, UpstreamIn]
 
   implicit val chain: ChainLink =
     downstream.chain ++ (proofDownstreamCanMapToUpstream +: upstream.chain)
 
-  def runChain(in: DownstreamIn): UpstreamOut = {
-    val ran = chain.foldLeft(in: Any) {
-      case (soFar, next) =>
-//        next.typeIn.symbol.asInstanceOf
-        next.runAny(soFar)
-    }
-    ran.asInstanceOf[UpstreamOut]
+  def run(in: DownstreamIn): UpstreamOut =
+    runStep(in)(proofDownstreamCanMapToUpstream.toFunction, identity)
+
+  lazy val runner =
+    toFunction
+
+  implicit lazy val toFunction: DownstreamIn => UpstreamOut =
+    run
+
+  implicit lazy val toLink: Link[DownstreamIn, UpstreamOut] =
+    Link(name)(toFunction)(downstream.typeIn, upstream.typeOut)
+
+  def map[A, B, C, D](fn: ((Downstream[DownstreamIn, DownstreamOut], Upstream[UpstreamIn, UpstreamOut])) => (Downstream[A, B], Upstream[C, D]))(implicit connect: DownstreamOut => A, connect2: D => UpstreamIn, connect3: B => C, tB: TypeTagTree[B], tC: TypeTagTree[C]): Step[DownstreamIn, B, C, UpstreamOut] = {
+    val (otherDown, otherUp) = fn((downstream, upstream))
+    val down = downstream andThen otherDown
+    val up = upstream compose otherUp
+    Step("<~>", down, up, connect3)
+  }
+
+  def filter(fn: ((Downstream[DownstreamIn, DownstreamOut], Upstream[UpstreamIn, UpstreamOut])) => Boolean): Step[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] = {
+    //no-op
+    //Still call the function in case it's side-effecting in some way. :`(
+    if (fn((downstream, upstream)))
+      this
+    else
+      this
   }
 
 }
@@ -83,7 +102,10 @@ object Step {
   val NAME = Macros.simpleNameOf[Step.type]
 
   private case class BuildWithoutProof[A, B, C, D](name: String, downstream: Downstream[A, B], upstream: Upstream[C, D]) extends StepLike[A, B, C, D]
-  private case class Build[A, B, C, D](name: String, downstream: Downstream[A, B], upstream: Upstream[C, D], proofDownstreamCanMapToUpstream: Link[B, C]) extends Step[A, B, C, D]
+  private case class Build[A, B, C, D](name: String, downstream: Downstream[A, B], upstream: Upstream[C, D], proofDownstreamCanMapToUpstream: Link[B, C]) extends Step[A, B, C, D] {
+    val typeIn = downstream.typeIn
+    val typeOut = upstream.typeOut
+  }
 
   def apply[A, B, C, D](name: String, downstream: Downstream[A, B], upstream: Upstream[C, D]): StepLike[A, B, C, D] =
     BuildWithoutProof(name, downstream, upstream)
