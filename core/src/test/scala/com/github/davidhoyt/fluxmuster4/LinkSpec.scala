@@ -1,6 +1,12 @@
 package com.github.davidhoyt.fluxmuster4
 
+import lift.{HystrixConfiguration, Hystrix}
+
 import com.github.davidhoyt.fluxmuster.{Macros, UnitSpec}
+
+import scala.concurrent.{ExecutionContext, Await, Future}
+import scala.concurrent.duration._
+import ExecutionContext.Implicits.global
 
 class LinkSpec extends UnitSpec {
   import scala.language.implicitConversions
@@ -185,10 +191,15 @@ class LinkSpec extends UnitSpec {
 //      }
   }
 
+  def executeLiftMultipleTimes[D, S](lift: Lift[Int, D, S, Future], times: Int = 250, timeout: FiniteDuration = 10.seconds)(implicit context: ExecutionContext): Seq[D] = {
+    val sequenced = Future.sequence[D, Seq](
+      for (idx <- 0 until times)
+      yield lift.run(idx)
+    )
+    Await.result(sequenced, timeout)
+  }
+
   it should "lift" in {
-    import scala.concurrent.{Await, ExecutionContext, Future}
-    import scala.concurrent.duration._
-    import ExecutionContext.Implicits.global
 
     val link1: Link[Int, Long] =
       ((x: Int) => x + 1).toLink("link1-a") ~>
@@ -206,10 +217,23 @@ class LinkSpec extends UnitSpec {
     val liftLink3 = Async(step1)
     val liftCombined = liftLink1 andThen liftLink2 andThen liftLink1 andThen liftLink3 andThen link1 andThen link1 andThen step1
 
+
+
     //println(liftCombined.chain.asDefaultString)
     val Seq(result, chainedResult) =
       Await.result(Future.sequence(Seq(liftCombined(0), liftCombined.runChain(0))), 5.seconds)
     chainedResult should be (result)
     result should be (72)
+
+    //Double check that it can support multiple thousands of concurrent runs.
+    executeLiftMultipleTimes(liftCombined, times = 2000)
+
+    val liftLink4 = Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) |> link1
+    val resultLiftLink4 = liftLink4(0)
+
+    it should "foo" in {
+    withClue("Hystrix fallback should not be used: ") {
+      executeLiftMultipleTimes(liftLink4, times = 1000) contains (-1L) should be(false)
+    }}
   }
 }

@@ -27,6 +27,18 @@ package object fluxmuster4 {
   type FnChainLink =
     (ChainableLink, ChainLink, ChainLink) => ChainLink
 
+  val typeUnit =
+    typeTagTreeOf[Unit]
+
+  val typeFutureOfUnit =
+    typeTagTreeOf[Future[Unit]]
+
+  val typeNothing =
+    typeTagTreeOf[Nothing]
+
+  val typeFutureOfNothing =
+    typeTagTreeOf[Future[Nothing]]
+
   implicit object IdentityConverter {
     def apply[F[_]] = new Converter[F, F] {
       override implicit def apply[A](a: F[A]): F[A] = a
