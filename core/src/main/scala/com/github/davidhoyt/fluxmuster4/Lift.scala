@@ -40,6 +40,8 @@ sealed trait Lift[In, Out, State, Into[_]]
 
   import scala.collection.immutable
 
+  val liftChain: ChainLift
+
   def apply[A, B](in: A)(implicit convert: A => In): Into[Out] =
     run(convert(in))
 
@@ -71,7 +73,7 @@ sealed trait Lift[In, Out, State, Into[_]]
     })(typeOut, tOut)
 
     val liftedChain: ChainLink = chain :+ linkForChain
-    val lift = Lift.create[In, D, State, Into](name, liftedChain, newLink, state, ops)(typeState, typeIn, tOut)
+    val lift = Lift.create[In, D, State, Into](name, liftedChain, newLink, liftChain, state, ops)(typeState, typeIn, tOut)
     lift
   }
 
@@ -99,7 +101,7 @@ sealed trait Lift[In, Out, State, Into[_]]
     })(typeOut, tOut)
 
     val liftedChain: ChainLink = chain :+ linkForChain
-    val lift = Lift.create[In, D, State, Into]("|>", liftedChain, newLink, state, ops)(typeState, typeIn, tOut)
+    val lift = Lift.create[In, D, State, Into]("|>", liftedChain, newLink, liftChain, state, ops)(typeState, typeIn, tOut)
     lift
   }
 
@@ -109,7 +111,7 @@ sealed trait Lift[In, Out, State, Into[_]]
   def lift[S, F[_]](other: Lift[In, Out, S, F])(implicit converter: F -> Into, tFofD: TypeTagTree[F[Out]]): Lift[In, Out, State, Into] = {
     val liftedChain: ChainLink = immutable.Vector(other)
     val foo = runInThisContext(other, other.runner)(converter, typeIn, tFofD, typeOut)
-    Lift.create[In, Out, State, Into](name, liftedChain, foo, state, ops)(typeState, typeIn, typeOut)
+    Lift.create[In, Out, State, Into](name, liftedChain, foo, other.liftChain, state, ops)(typeState, typeIn, typeOut)
   }
 
   def asShortString: String =
@@ -137,59 +139,66 @@ sealed trait Lift[In, Out, State, Into[_]]
 object Lift {
   import scala.collection.immutable
 
-  private case class Build[A, D, S, F[_]](name: String, chain: ChainLink, link: Link[A, F[D]], state: S, ops: LiftOps[S, F], override val asShortString: String = null)(implicit val typeState: TypeTagTree[S], val typeIn: TypeTagTree[A], val typeOut: TypeTagTree[F[D]]) extends Lift[A, D, S, F] with Named {
+  private case class Build[A, D, S, F[_]](name: String, chain: ChainLink, link: Link[A, F[D]], liftChainSoFar: ChainLift, state: S, ops: LiftOps[S, F], override val asShortString: String = null)(implicit val typeState: TypeTagTree[S], val typeIn: TypeTagTree[A], val typeOut: TypeTagTree[F[D]]) extends Lift[A, D, S, F] with Named {
     val runner =
       link.runner
+
+    lazy val liftChain: ChainLift =
+      if ((liftChainSoFar eq null) || liftChainSoFar.isEmpty)
+        immutable.Vector(this.asInstanceOf[ChainableLift])
+      else
+        this.asInstanceOf[ChainableLift] +: liftChainSoFar
   }
 
-  private def liftLink[A, D, S, F[_]](chained: Chained[A, D], state: S, ops: LiftOps[S, F])(implicit tOut: TypeTagTree[F[D]]): Link[A, F[D]] = {
+  private[fluxmuster4] def liftLink[A, D, S, F[_]](chained: Chained[A, D], state: S, ops: LiftOps[S, F])(implicit tOut: TypeTagTree[F[D]]): Link[A, F[D]] = {
     val chain = chained.chain
     val runner = chained.runner
     val liftedRunner = Link(ops.liftRunner[A, D](chain, runner)(state, chained.typeIn, chained.typeOut))(chained.typeIn, tOut)
     liftedRunner
   }
 
-  def create[A, D, S, F[_]](name: String, chain: ChainLink, link: Link[A, F[D]], state: S, ops: LiftOps[S, F])(implicit tState: TypeTagTree[S], tIn: TypeTagTree[A], tOut: TypeTagTree[F[D]]): Lift[A, D, S, F] =
-    Build[A, D, S, F](name, chain, link, state, ops)(tState, tIn, tOut)
+  def create[A, D, S, F[_]](name: String, chain: ChainLink, link: Link[A, F[D]], liftChain: ChainLift, state: S, ops: LiftOps[S, F])(implicit tState: TypeTagTree[S], tIn: TypeTagTree[A], tOut: TypeTagTree[F[D]]): Lift[A, D, S, F] =
+    Build[A, D, S, F](name, chain, link, liftChain, state, ops)(tState, tIn, tOut)
 
-  def create[A, D, S, F[_]](name: String, chained: Chained[A, D], state: S, ops: LiftOps[S, F])(implicit typeState: TypeTagTree[S], typeIn: TypeTagTree[A], typeOut: TypeTagTree[F[D]]): Lift[A, D, S, F] = {
-//    val chain = chained.chain
-//    val runner = chained.runner
-//    val link = chained match {
-//      case link: Link[A, D] =>
-//        link
-//      case other =>
-//        Link(runner)
-//    }
+  def create[A, D, S, F[_]](name: String, chained: Chained[A, D], liftChain: ChainLift, state: S, ops: LiftOps[S, F])(implicit typeState: TypeTagTree[S], typeIn: TypeTagTree[A], typeOut: TypeTagTree[F[D]]): Lift[A, D, S, F] = {
     val liftedRunner = liftLink(chained, state, ops)
     val liftedChain = immutable.Vector(liftedRunner)
-    val lifted = create[A, D, S, F](name, liftedChain, liftedRunner, state, ops)
+    val lifted = create[A, D, S, F](name, liftedChain, liftedRunner, liftChain, state, ops)
     lifted
   }
 }
 
-sealed trait LiftNeedsChained[State, Into[_]]
+trait LiftNeedsChained[Out, State, Into[_]]
 extends LiftLike[State, Into] {
   this: Named =>
 
-  def |>[A, D](other: Link[A, D])(implicit tOut: TypeTagTree[Into[D]]): Lift[A, D, State, Into] =
-    lift(other)
+  import scala.collection.immutable
 
-  def lift[A, D](other: Link[A, D])(implicit tOut: TypeTagTree[Into[D]]): Lift[A, D, State, Into] =
-    Lift.create(name, other, state, ops)(typeState, other.typeIn, tOut)
+//  def |>[A >: In, D <: Out](other: Link[A, D])(implicit tOut: TypeTagTree[Into[D]]): Lift[A, D, State, Into] =
+//    lift(other)
 
-  def |>[A, B, C, D](other: Step[A, B, C, D])(implicit tOut: TypeTagTree[Into[D]]): Lift[A, D, State, Into] =
-    lift(other)
+  def lift[A](other: Link[A, Out])(implicit typeOut: TypeTagTree[Out], typeIntoOut: TypeTagTree[Into[Out]]): Lift[A, Out, State, Into] =
+    Lift.create(name, other, EmptyChainLift, state, ops)(typeState, other.typeIn, typeIntoOut)
 
-  def lift[A, B, C, D](other: Step[A, B, C, D])(implicit tOut: TypeTagTree[Into[D]]): Lift[A, D, State, Into] =
+//  def |>[A >: In, B, C, D <: Out](other: Step[A, B, C, D])(implicit tOut: TypeTagTree[Into[D]]): Lift[A, D, State, Into] =
+//    lift(other)
+
+  def lift[A, B, C](other: Step[A, B, C, Out])(implicit typeOut: TypeTagTree[Out], typeIntoOut: TypeTagTree[Into[Out]]): Lift[A, Out, State, Into] =
     lift(other.toLink)
+
+  def lift[A, S, F[_]](other: Lift[A, Out, S, F])(implicit converter: F -> Into, typeOut: TypeTagTree[Into[Out]], typeFofOut: TypeTagTree[F[Out]], typeIntoFofOut: TypeTagTree[Into[F[Out]]]): Lift[A, Out, State, Into] = {
+    val liftedChain = immutable.Vector(other)
+    val liftedLink = runInThisContext(other, other.run)(converter, other.typeIn, other.typeOut, typeOut)
+    val lift = Lift.create(name, liftedChain, liftedLink, other.liftChain, state, ops)(typeState, other.typeIn, typeOut)
+    lift
+  }
 }
 
 object LiftNeedsChained {
-  private case class Build[S, F[_]](name: String, state: S, ops: LiftOps[S, F])(implicit val typeState: TypeTagTree[S]) extends LiftNeedsChained[S, F] with Named
+  private case class Build[D, S, F[_]](name: String, state: S, ops: LiftOps[S, F])(implicit val typeState: TypeTagTree[S]) extends LiftNeedsChained[D, S, F] with Named
 
-  def apply[S, F[_]](name: String, state: S, ops: LiftOps[S, F])(implicit typeState: TypeTagTree[S]): LiftNeedsChained[S, F] =
-    Build[S, F](name, state, ops)
+  def apply[D, S, F[_]](name: String, state: S, ops: LiftOps[S, F])(implicit typeState: TypeTagTree[S]): LiftNeedsChained[D, S, F] =
+    Build[D, S, F](name, state, ops)
 }
 
 object Async {
@@ -198,5 +207,5 @@ object Async {
   val NAME = Macros.simpleNameOf[Async.type]
 
   def apply[A, D](chained: Chained[A, D])(implicit context: ExecutionContext, typeState: TypeTagTree[ExecutionContext], typeIn: TypeTagTree[A], typeResult: TypeTagTree[Future[D]]): Lift[A, D, ExecutionContext, Future] =
-    Lift.create(NAME, chained, context, FutureLiftOps)
+    Lift.create(NAME, chained, EmptyChainLift, context, FutureLiftOps)
 }

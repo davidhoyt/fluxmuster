@@ -228,12 +228,18 @@ class LinkSpec extends UnitSpec {
     //Double check that it can support multiple thousands of concurrent runs.
     executeLiftMultipleTimes(liftCombined, times = 2000)
 
-    val liftLink4 = Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) |> link1
-    val resultLiftLink4 = liftLink4(0)
+    val liftLink4 = Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift link1
+    liftLink4.liftChain.size should be (1)
+    println(liftLink4.liftChain)
+    val liftLink5 = Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift Async(link1)
+    println(liftLink5.liftChain)
+    val liftLink6 = Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift (Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift Async(link1))
+    println(liftLink6.liftChain)
 
-    it should "foo" in {
     withClue("Hystrix fallback should not be used: ") {
-      executeLiftMultipleTimes(liftLink4, times = 1000) contains (-1L) should be(false)
-    }}
+      executeLiftMultipleTimes(liftLink4, times = 100) contains (-1L) should be(false)
+      executeLiftMultipleTimes(liftLink5, times = 100) contains (-1L) should be(false)
+      executeLiftMultipleTimes(liftLink6, times = 100) contains (-1L) should be(false)
+    }
   }
 }

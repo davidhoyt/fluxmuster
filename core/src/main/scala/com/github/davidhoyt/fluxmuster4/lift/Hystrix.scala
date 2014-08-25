@@ -15,75 +15,106 @@ object Hystrix {
 
   //B = return value or fallback
   //A = optional value to call the hystrix command with
-  type HystCommandNeedsFallback[-A, B] = Option[() => B] => A => Future[B]
+  type HystCommandNeedsFallback[-A, B] = Option[() => Any] => A => Future[B]
   type HystCommand[-A, +B] = A => Future[B]
 
   val NAME = Macros.simpleNameOf[Hystrix.type]
 
-  val typeStateOfNothing =
-    typeTagTreeOf[State[Nothing]]
+  val typeState =
+    typeTagTreeOf[State]
 
 
 
-  case class State[T](fallback: Option[() => T], configuration: HystrixConfiguration)(implicit val typeFallback: TypeTagTree[T], val typeLiftedFallback: TypeTagTree[Future[T]])
+  case class State(fallback: Option[() => Any], configuration: HystrixConfiguration)(implicit val typeFallback: TypeTagTree[Any], val typeLiftedFallback: TypeTagTree[Future[Any]])
 
 
 
-  def apply(configuration: HystrixConfiguration): LiftNeedsChained[State[Nothing], Future] =
-    create[Nothing](NAME, configuration, None)(typeNothing, typeFutureOfNothing, typeStateOfNothing)
+  def apply(configuration: HystrixConfiguration): LiftNeedsChained[_, State, Future] =
+    create[Nothing](NAME, configuration, None)
 
-  def apply(name: String, configuration: HystrixConfiguration): LiftNeedsChained[State[Nothing], Future] =
-    create[Nothing](name, configuration, None)(typeNothing, typeFutureOfNothing, typeStateOfNothing)
+  def apply(name: String, configuration: HystrixConfiguration): LiftNeedsChained[_, State, Future] =
+    create[Nothing](name, configuration, None)
 
   def withFallback[T](configuration: HystrixConfiguration)
-                     (fallback: => T)
-                     (implicit typeFallback: TypeTagTree[T], typeLiftedFallback: TypeTagTree[Future[T]], typeState: TypeTagTree[State[T]]): LiftNeedsChained[State[T], Future] =
+                     (fallback: => T): LiftNeedsChained[T, State, Future] =
     create(NAME, configuration, Some(() => fallback))
 
   def withFallback[T](name: String, configuration: HystrixConfiguration)
-                     (fallback: => T)
-                     (implicit typeFallback: TypeTagTree[T], typeLiftedFallback: TypeTagTree[Future[T]], typeState: TypeTagTree[State[T]]): LiftNeedsChained[State[T], Future] =
+                     (fallback: => T): LiftNeedsChained[T, State, Future] =
     create(name, configuration, Some(() => fallback))
 
 
 
-  private def create[T](name: String, configuration: HystrixConfiguration, fallback: => Option[() => T])
-              (implicit typeFallback: TypeTagTree[T], typeLiftedFallback: TypeTagTree[Future[T]], typeState: TypeTagTree[State[T]]): LiftNeedsChained[State[T], Future] = {
+  private def create[T](providedName: String, configuration: HystrixConfiguration, fallback: => Option[() => T]): LiftNeedsChained[T, State, Future] = {
+
+    import scala.collection.immutable
+
+    import scala.language.higherKinds
 
     require(configuration.timeout.isFinite(), s"Hystrix timeout must be a finite amount")
-    LiftNeedsChained(name, State(fallback, configuration), new HystrixOps[T])
-  }
 
-  private class HystrixOps[T] extends LiftOps[State[T], Future] {
-    def point[A](given: => A)(implicit state: State[T]): Future[A] =
-      FutureLiftOps.point(given)(state.configuration.context)
+    val providedTypeState = typeState
 
-    def flatten[A](given: Future[Future[A]])(implicit state: State[T]): Future[A] =
-      FutureLiftOps.flatten(given)(state.configuration.context)
+    new LiftNeedsChained[T, State, Future] with Named {
+      val ops       = HystrixOps
+      val state     = State(fallback, configuration)
+      val typeState = providedTypeState
+      val name      = providedName
 
-    def map[A, B](given: Future[A])(fn: A => B)(implicit state: State[T]): Future[B] =
-      FutureLiftOps.map(given)(fn)(state.configuration.context)
 
-    def liftRunner[A, D](chain: ChainLink, runner: A => D)(implicit state: State[T], typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] = {
-      //typeOut = Future[D]
-      //state.typeLiftedFallback = Future[T]
-      val unliftedTypeArgumentOut = typeOut.tpe
-      val unliftedTypeArgumentFallback = state.typeLiftedFallback.typeArguments.head.tpe
-      val convertedState = state.asInstanceOf[State[D]]
-      val convertedOps = this.asInstanceOf[HystrixOps[D]]
+      override def lift[A, S, F[_]](other: Lift[A, T, S, F])(implicit converter: F -> Future, typeOut: TypeTagTree[Future[T]], typeFofOut: TypeTagTree[F[T]], typeIntoFofOut: TypeTagTree[Future[F[T]]]): Lift[A, T, State, Future] = {
+        //TODO: Lift hystrix fallback ...
 
-      require(unliftedTypeArgumentFallback <:< unliftedTypeArgumentOut, s"$unliftedTypeArgumentOut is not a subtype of $unliftedTypeArgumentFallback")
-      construct[A, D](convertedState, convertedOps)(runner).apply(convertedState.fallback)
+
+        val liftedFallback = other.liftChain.foldLeft(state.fallback) {
+          case (fall, part) =>
+            fall map (f => () => part.ops.point(f())(part.state))
+        }
+
+        val newState = State(liftedFallback, configuration)
+
+        val liftedChain = immutable.Vector(other)
+        val liftedLink = runInThisContext(other, other.run)(converter, other.typeIn, other.typeOut, typeOut)
+
+
+
+        val f = Lift.create(name, liftedChain, liftedLink, other.liftChain, newState, HystrixOps)(typeState, other.typeIn, typeOut)
+        f
+      }
     }
   }
 
-  private def construct[A, D](state: State[D], ops: HystrixOps[D])(runner: A => D): HystCommandNeedsFallback[A, D] =
-    (providedFallback: Option[() => D]) => {
+  private object HystrixOps extends LiftOps[State, Future] {
+    def point[A](given: => A)(implicit state: State): Future[A] =
+      FutureLiftOps.point(given)(state.configuration.context)
+
+    def flatten[A](given: Future[Future[A]])(implicit state: State): Future[A] =
+      FutureLiftOps.flatten(given)(state.configuration.context)
+
+    def map[A, B](given: Future[A])(fn: A => B)(implicit state: State): Future[B] =
+      FutureLiftOps.map(given)(fn)(state.configuration.context)
+
+    def liftRunner[A, D](chain: ChainLink, runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] = {
+//      //typeOut = Future[D]
+//      //state.typeLiftedFallback = Future[T]
+//      val unliftedTypeArgumentOut = typeOut.tpe
+//      val unliftedTypeArgumentFallback = state.typeLiftedFallback.typeArguments.head.tpe
+//      val convertedState = state.asInstanceOf[State[D]]
+//      val convertedOps = this.asInstanceOf[HystrixOps[D]]
+//
+//      require(unliftedTypeArgumentFallback <:< unliftedTypeArgumentOut, s"$unliftedTypeArgumentOut is not a subtype of $unliftedTypeArgumentFallback")
+//      construct[A, D](convertedState, convertedOps)(runner).apply(convertedState.fallback)
+      construct[A, D](state)(runner).apply(state.fallback)
+    }
+  }
+
+  private def construct[A, D](state: State)(runner: A => D): HystCommandNeedsFallback[A, D] =
+    (providedFallback: Option[() => Any]) => {
       //Place this outside the returned function in order to ensure
       //it's evaluated only once across multiple invocations of the returned
       //function.
       lazy val fallbackTo =
-        providedFallback.getOrElse(throw new UnsupportedOperationException("No fallback available")).apply()
+        providedFallback.getOrElse(throw new UnsupportedOperationException("No fallback available")).apply().asInstanceOf[D]
 
       import state._
       import state.configuration._

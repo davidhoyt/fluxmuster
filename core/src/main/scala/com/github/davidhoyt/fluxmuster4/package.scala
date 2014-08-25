@@ -20,6 +20,12 @@ package object fluxmuster4 {
   type ChainLink = immutable.Vector[ChainableLink]
   val EmptyChainLink = immutable.Vector[ChainableLink]()
 
+  type ChainableLift =
+    Lift[_, _, _, _] with Named
+
+  type ChainLift = immutable.Vector[ChainableLift]
+  val EmptyChainLift = immutable.Vector[ChainableLift]()
+
   type SideEffecting[Out] = Out => Unit
   type ChainSideEffects[Out] = immutable.Vector[SideEffecting[Out]]
   def EmptyChainSideEffects[Out] = immutable.Vector[SideEffecting[Out]]()
@@ -27,8 +33,17 @@ package object fluxmuster4 {
   type FnChainLink =
     (ChainableLink, ChainLink, ChainLink) => ChainLink
 
+  type FnChainLift =
+    (ChainableLift, ChainLift, ChainLift) => ChainLift
+
   val typeUnit =
     typeTagTreeOf[Unit]
+
+  val typeAny =
+    typeTagTreeOf[Any]
+
+  val typeFutureOfAny =
+    typeTagTreeOf[Future[Any]]
 
   val typeFutureOfUnit =
     typeTagTreeOf[Future[Unit]]
@@ -77,6 +92,14 @@ package object fluxmuster4 {
 
     def asShortString =
       chainLink.map(_.asShortString).mkString(", ")
+  }
+
+  implicit class ChainLiftEnhancements(val chainLift: ChainLift) extends AnyVal {
+    def asDefaultString =
+      chainLift.map(_.asDefaultString).mkString(", ")
+
+    def asShortString =
+      chainLift.map(_.asShortString).mkString(", ")
   }
 
   def typeTagTreeOf[T](implicit ttt: TypeTagTree[T]) =
