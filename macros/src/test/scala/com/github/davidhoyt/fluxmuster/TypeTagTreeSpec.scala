@@ -77,13 +77,14 @@ class TypeTagTreeSpec extends UnitSpec {
     a.toShortString should be ("TypeTagTreeSpec.this.Structural")
 
     val b = withTypeTagTree[{def methodA(a: Int): Unit; def methodB: Int}]
-    b.toShortString should be("AnyRef{def methodA(a: Int): Unit; def methodB: Int}")
+    b.toShortString should be("scala.AnyRef{def methodA(a: Int): Unit; def methodB: Int}")
   }
 
   it should "construct valid trees for existential types" in {
     //Covariant
     val a = withTypeTagTree[(Vector[Seq[_]], List[_], MultiParameterCaseClass3[_, _, _])]
-    a.toShortString should be("(Vector[Seq[_]], List[_], TypeTagTreeSpec.this.MultiParameterCaseClass3[_, _, _])")
+    a.toShortString should be("(scala.Vector[scala.Seq[_]], scala.List[_], TypeTagTreeSpec.this.MultiParameterCaseClass3[_, _, _])")
+
     //TODO: Why doesn't equality work for existential types?
     //a.typeParameters.types should be (Seq(typeOf[Vector[Seq[_]]], typeOf[List[_]], typeOf[MultiParameterCaseClass3[_, _, _]]))
 
@@ -150,7 +151,7 @@ class TypeTagTreeSpec extends UnitSpec {
 
   it should "construct valid trees for deeply nested complex types" in {
     val a = withTypeTagTree[MultiParameterCaseClass3[MultiParameterCaseClass2[MultiParameterCaseClass2[AliasForCaseClassWithAlternateParameterCount2[String], Structural], String], Vector[Seq[Array[Seq[Vector[Seq[Seq[Seq[Seq[Array[SingleParameterTraitContravariant[MultiParameterCaseClass2[Seq[Vector[Array[String]]], java.util.ArrayList[java.util.HashSet[Vector[String]]]]]]]]]]]]]]], MultiParameterCaseClass2[SingleParameterTraitInvariant[String], MultiParameterCaseClass3[Seq[Array[java.util.Map[String, Long]]], Int, String => (Int, (Long, Int, Seq[String] => List[::[Int]]))]]]]
-    a.toShortString should be ("TypeTagTreeSpec.this.MultiParameterCaseClass3[TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.AliasForCaseClassWithAlternateParameterCount2[String],TypeTagTreeSpec.this.Structural],String],Vector[Seq[Array[Seq[Vector[Seq[Seq[Seq[Seq[Array[TypeTagTreeSpec.this.SingleParameterTraitContravariant[TypeTagTreeSpec.this.MultiParameterCaseClass2[Seq[Vector[Array[String]]],java.util.ArrayList[java.util.HashSet[Vector[String]]]]]]]]]]]]]]],TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.SingleParameterTraitInvariant[String],TypeTagTreeSpec.this.MultiParameterCaseClass3[Seq[Array[java.util.Map[String,Long]]],Int,String => (Int, (Long, Int, Seq[String] => List[::[Int]]))]]]")
+    a.toShortString should be ("TypeTagTreeSpec.this.MultiParameterCaseClass3[TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.AliasForCaseClassWithAlternateParameterCount2[String],TypeTagTreeSpec.this.Structural],String],scala.Vector[scala.Seq[scala.Array[scala.Seq[scala.Vector[scala.Seq[scala.Seq[scala.Seq[scala.Seq[scala.Array[TypeTagTreeSpec.this.SingleParameterTraitContravariant[TypeTagTreeSpec.this.MultiParameterCaseClass2[scala.Seq[scala.Vector[scala.Array[String]]],java.util.ArrayList[java.util.HashSet[scala.Vector[String]]]]]]]]]]]]]]],TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.SingleParameterTraitInvariant[String],TypeTagTreeSpec.this.MultiParameterCaseClass3[scala.Seq[scala.Array[java.util.Map[String,Long]]],Int,String => (Int, (Long, Int, scala.Seq[String] => scala.List[scala.::[Int]]))]]]")
     a.typeArguments.types should be (Seq(typeOf[ TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.AliasForCaseClassWithAlternateParameterCount2[String],TypeTagTreeSpec.this.Structural],String] ], typeOf[ Vector[Seq[Array[Seq[Vector[Seq[Seq[Seq[Seq[Array[TypeTagTreeSpec.this.SingleParameterTraitContravariant[TypeTagTreeSpec.this.MultiParameterCaseClass2[Seq[Vector[Array[String]]],java.util.ArrayList[java.util.HashSet[Vector[String]]]]]]]]]]]]]]] ], typeOf[ TypeTagTreeSpec.this.MultiParameterCaseClass2[TypeTagTreeSpec.this.SingleParameterTraitInvariant[String],TypeTagTreeSpec.this.MultiParameterCaseClass3[Seq[Array[java.util.Map[String,Long]]], Int, String => (Int, (Long, Int, Seq[String] => List[::[Int]]))]] ]))
   }
 

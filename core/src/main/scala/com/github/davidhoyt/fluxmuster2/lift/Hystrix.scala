@@ -27,10 +27,10 @@ object Hystrix {
 
   case class State[T](fallback: () => T, configuration: HystrixConfiguration)(implicit val timeout: Timeout, val context: ExecutionContext, val typeFallback: TypeTagTree[T], val typeLiftedFallback: TypeTagTree[Future[T]])
 
-  def apply[T](name: String)
-              (fallback: => T = throw new UnsupportedOperationException("No fallback available"))
-              (implicit configuration: HystrixConfiguration, timeout: Timeout, executionContext: ExecutionContext, tT: TypeTagTree[T], tFutureOfT: TypeTagTree[Future[T]], tS: TypeTagTree[State[T]]): LiftedNeedsStep[State[T], Future] =
-    apply(name, configuration)(fallback)(timeout, executionContext, tT, tFutureOfT, tS)
+//  def apply[T](name: String)
+//              (fallback: => T = throw new UnsupportedOperationException("No fallback available"))
+//              (implicit configuration: HystrixConfiguration, timeout: Timeout, executionContext: ExecutionContext, tT: TypeTagTree[T], tFutureOfT: TypeTagTree[Future[T]], tS: TypeTagTree[State[T]]): LiftedNeedsStep[State[T], Future] =
+//    apply(name, configuration)(fallback)(timeout, executionContext, tT, tFutureOfT, tS)
 
   def apply[T](name: String, configuration: HystrixConfiguration)
               (fallback: => T = throw new UnsupportedOperationException("No fallback available"))

@@ -226,20 +226,20 @@ class LinkSpec extends UnitSpec {
     result should be (72)
 
     //Double check that it can support multiple thousands of concurrent runs.
-    executeLiftMultipleTimes(liftCombined, times = 2000)
+//    executeLiftMultipleTimes(liftCombined, times = 2000)
 
-    val liftLink4 = Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift link1
-    liftLink4.liftChain.size should be (1)
-    println(liftLink4.liftChain)
-    val liftLink5 = Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift Async(link1)
-    println(liftLink5.liftChain)
-    val liftLink6 = Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift (Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift Async(link1))
-    println(liftLink6.liftChain)
+//    val liftLink4 = Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift link1
+//    liftLink4.liftChain.size should be (1)
+//    val liftLink5 = Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift Async(link1)
+//    val liftLink6 = Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift (Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift Async(link1))
+    val liftLink7 = (Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-3L) lift (Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-2L) lift (Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift Async(link1))))
+    println(liftLink7.liftChain)
 
     withClue("Hystrix fallback should not be used: ") {
-      executeLiftMultipleTimes(liftLink4, times = 100) contains (-1L) should be(false)
-      executeLiftMultipleTimes(liftLink5, times = 100) contains (-1L) should be(false)
-      executeLiftMultipleTimes(liftLink6, times = 100) contains (-1L) should be(false)
+//      executeLiftMultipleTimes(liftLink4, times = 100) contains (-1L) should be(false)
+//      executeLiftMultipleTimes(liftLink5, times = 100) contains (-1L) should be(false)
+//      executeLiftMultipleTimes(liftLink6, times = 100) contains (-1L) should be(false)
+      println(executeLiftMultipleTimes(liftLink7, times = 1000))
     }
   }
 }

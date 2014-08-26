@@ -106,12 +106,12 @@ package object fluxmuster4 {
     TypeTagTree.typeTagTreeOf[T](ttt)
 
   implicit object FutureLiftOps extends LiftOps[ExecutionContext, Future] {
-    import scala.concurrent.{Promise, future}
+    import scala.concurrent.Promise
     import scala.util.control.NonFatal
 
     def liftRunner[A, D](chain: ChainLink, runner: A => D)(implicit ec: ExecutionContext, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] =
       (a: A) =>
-        future {
+        Future {
           runner(a)
         }
 

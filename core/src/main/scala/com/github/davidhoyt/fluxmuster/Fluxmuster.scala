@@ -74,7 +74,7 @@ object Fooz {
     //problem is that lifting is flattening! :/
 
     val hystrixize: ProxyStep[String, Future[Long], Future[Long], Future[Long]] =
-      Hystrix(0L) |> step3
+      Hystrix(hystrixConfiguration)(0L) |> step3
 
     val akkaize = //: ProxyStep[String, Future[Long], Future[Long], Future[Long]] =
       Akka.par(AkkaConfiguration()) blah hystrixize

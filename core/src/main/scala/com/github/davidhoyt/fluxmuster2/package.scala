@@ -1,6 +1,6 @@
 package com.github.davidhoyt
 
-import com.twitter.util.NonFatal
+import scala.util.control.NonFatal
 
 package object fluxmuster2 {
   import scala.collection.immutable

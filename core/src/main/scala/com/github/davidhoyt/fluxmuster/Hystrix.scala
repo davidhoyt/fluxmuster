@@ -20,9 +20,9 @@ object Hystrix {
 
   val NAME = Macros.simpleNameOf[Hystrix.type]
 
-  def apply[T](fallback: => T = throw new UnsupportedOperationException("No fallback available"))
-              (implicit configuration: HystrixConfiguration, timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLiftDownstreamWithHint[T, Future] =
-    apply(configuration)(fallback)
+//  def apply[T](fallback: => T = throw new UnsupportedOperationException("No fallback available"))
+//              (implicit configuration: HystrixConfiguration, timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLiftDownstreamWithHint[T, Future] =
+//    apply(configuration)(fallback)
 
   def apply[T](configuration: HystrixConfiguration)(fallback: => T = throw new UnsupportedOperationException("No fallback available"))
               (implicit timeout: Timeout, executionContext: ExecutionContext, actorRefFactory: ActorRefFactory): ProxyLiftDownstreamWithHint[T, Future] = {

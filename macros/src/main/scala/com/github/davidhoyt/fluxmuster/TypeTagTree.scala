@@ -68,7 +68,7 @@ object TypeTagTreeNode {
         process(List(underlying))
 
       //Annotated type
-      case AnnotatedType(x, underlying, _) =>
+      case AnnotatedType(_, underlying) =>
         process(List(underlying))
 
       //Standard type
@@ -131,6 +131,9 @@ sealed trait TypeTagTree[T] {
 }
 
 object TypeTagTree {
+  import scala.reflect.runtime.universe._
+  import scala.reflect.macros._
+
   import scala.language.experimental.macros
 
   /** Materializes an instance of a [[TypeTagTree]] for the provided type `T`. */
@@ -166,81 +169,21 @@ object TypeTagTree {
     /**
      * Generates a [[TypeTagTree]] instance when applied to a given [[scala.reflect.runtime.universe.Type]].
      */
-    def typeTagTree[T : c.WeakTypeTag](c: Context): c.Expr[TypeTagTree[T]] = {
+    def typeTagTree[T : c.WeakTypeTag](c: blackbox.Context): c.Expr[TypeTagTree[T]] = {
       import c.universe._
 
-      val t = c.weakTypeOf[T]
+      val typeParam = c.weakTypeOf[T]
       val pos = c.enclosingPosition
-
-      //Create a TypeTagTreeSource instance.
-      val file = c.literal(pos.source.toString())
-      val line = c.literal(pos.line)
-      val column = c.literal(pos.column)
-      val index = c.literal(pos.startOrPoint)
-      val typeTagTreeSource =
-        reify {
-          TypeTagTreeSource(file.splice, line.splice, column.splice, index.splice)
-        }
-
-      /**
-       * Takes a string like "foo.bar.qux" and converts it to:
-       *   `Select(Select(Ident(newTermName("foo")), newTermName("bar")), newTermName("qux"))`
-       */
-      def selectWith(name: String): c.Tree = {
-        def recurse(curr: c.Tree, remaining: List[String]): c.Tree = remaining match {
-          case head :: tail if tail.nonEmpty =>
-            Select(recurse(curr, tail), newTermName(head))
-          case head :: _ =>
-            Ident(newTermName(head))
-        }
-        val split = name.split('.').toList.reverse
-        recurse(EmptyTree, split)
-      }
-
-      /*
-        Select(
-          Select(
-            Select(
-              Select(
-                Select(
-                  Ident(newTermName("com")
-                ),
-                newTermName("github")
-              ),
-              newTermName("davidhoyt")
-            ),
-            newTermName("fluxmuster")
-          ),
-          newTermName("TypeTagTreeNode")
-        )
-       */
-      val selectTypeTagTreeNode =
-        selectWith(typeOf[TypeTagTreeNode[_]].typeSymbol.fullName)
 
       /**
        * Generates an AST representing the following:
        *   `TypeTagTreeNode[T](TypeTagTreeSource(...))(&lt;implicitly discovered tag&gt;)`
        * `T` is the provided type and its implicit type tag is automagically
        * found and created by the compiler.
-       *
-       * Reify is not eligible because in 2.10 we're unable to splice a type argument.
        */
-      def typeTagTreeNode(value: c.Type): c.Tree =
-        Apply(
-          TypeApply(
-            selectTypeTagTreeNode,
-            List(
-              //type
-              TypeTree(value)
-            )
-          ),
-          List(
-            //source
-            typeTagTreeSource.tree
-          )
-        )
-
-      c.Expr[TypeTagTreeNode[T]](typeTagTreeNode(t))
+      c.Expr[TypeTagTreeNode[T]] {
+        q"_root_.com.github.davidhoyt.fluxmuster.TypeTagTreeNode[$typeParam](_root_.com.github.davidhoyt.fluxmuster.TypeTagTreeSource(${pos.source.toString()}, ${pos.line}, ${pos.column}, ${pos.start}))"
+      }
     }
   }
 }
