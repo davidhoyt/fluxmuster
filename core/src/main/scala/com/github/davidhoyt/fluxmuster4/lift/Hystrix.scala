@@ -63,23 +63,22 @@ object Hystrix {
 
 
       override def lift[A, S, F[_]](other: Lift[A, T, S, F])(implicit converter: F -> Future, typeOut: TypeTagTree[Future[T]], typeFofOut: TypeTagTree[F[T]], typeIntoFofOut: TypeTagTree[Future[F[T]]]): Lift[A, T, State, Future] = {
-        //TODO: Lift hystrix fallback ...
-
-
+        //The fallback must also be lifted up the chain so that it can be applied
+        //to the resulting lifted value if necessary.
         val liftedFallback = other.liftChain.foldLeft(state.fallback) {
           case (fall, part) =>
-            fall map (f => () => part.ops.point(f())(part.state))
+            fall map (f => () => part.ops.point(f())(part.ops.unsafeCastAsState(part.state)))
         }
 
-        val newState = State(liftedFallback, configuration)
+        //Create a new state where the fallback has been properly lifted into
+        //context and which should be used for runs.
+        val newState = state.copy(fallback = liftedFallback)
 
         val liftedChain = immutable.Vector(other)
-        val liftedLink = runInThisContext(other, other.run)(converter, other.typeIn, other.typeOut, typeOut)
+        val liftedLink = runInThisContext(other, other.run, newState)(converter, other.typeIn, other.typeOut, typeOut)
 
-
-
-        val f = Lift.create(name, liftedChain, liftedLink, other.liftChain, newState, HystrixOps)(typeState, other.typeIn, typeOut)
-        f
+        val lift = Lift.create(name, liftedChain, liftedLink, other.liftChain, state, HystrixOps)(typeState, other.typeIn, typeOut)
+        lift
       }
     }
   }
@@ -114,7 +113,7 @@ object Hystrix {
       //it's evaluated only once across multiple invocations of the returned
       //function.
       lazy val fallbackTo =
-        providedFallback.getOrElse(throw new UnsupportedOperationException("No fallback available")).apply().asInstanceOf[D]
+        providedFallback.getOrElse(throw new UnsupportedOperationException(s"No fallback available")).apply().asInstanceOf[D]
 
       import state._
       import state.configuration._

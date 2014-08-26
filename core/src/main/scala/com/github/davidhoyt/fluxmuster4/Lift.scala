@@ -7,6 +7,13 @@ import scala.language.higherKinds
 trait LiftOps[State, Into[_]] {
   import scala.language.implicitConversions
 
+  implicit def toState[S](instance: S)(implicit ev: S => State): State =
+    ev(instance)
+
+  /** WARNING: Do not use unless you're sure it's okay. Give preference to `toState` instead. */
+  def unsafeCastAsState[S](instance: S): State =
+    instance.asInstanceOf[State]
+
   implicit def liftRunner[A, D](chained: ChainLink, runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Into[D]
   implicit def point[A](given: => A)(implicit state: State): Into[A]
   implicit def flatten[A](given: Into[Into[A]])(implicit state: State): Into[A]
@@ -18,15 +25,15 @@ sealed trait LiftLike[State, Into[_]] {
   implicit val state: State
   implicit val ops: LiftOps[State, Into]
 
-  def runInThisContext[In, Out, From[_]](chained: Chained[In, From[Out]], otherRunner: In => From[Out])(implicit converter: From -> Into, typeIn: TypeTagTree[In], typeFromOut: TypeTagTree[From[Out]], typeIntoOut: TypeTagTree[Into[Out]]): Link[In, Into[Out]] = {
+  def runInThisContext[In, Out, From[_]](chained: Chained[In, From[Out]], otherRunner: In => From[Out], providedState: State)(implicit converter: From -> Into, typeIn: TypeTagTree[In], typeFromOut: TypeTagTree[From[Out]], typeIntoOut: TypeTagTree[Into[Out]]): Link[In, Into[Out]] = {
     val chain = chained.chain
     Link((in: In) => {
-      val runOtherInThisContext: In => Into[From[Out]] = ops.liftRunner(chain, otherRunner)(state, typeIn, typeFromOut)
+      val runOtherInThisContext: In => Into[From[Out]] = ops.liftRunner(chain, otherRunner)(providedState, typeIn, typeFromOut)
       val resultAfterRunning: Into[From[Out]] = runOtherInThisContext(in)
 
       //flatMap!
-      val mapResultBackIntoThisContext = ops.map(resultAfterRunning)(converter.apply)(state)
-      val flattenedBackIntoThisContext: Into[Out] = ops.flatten(mapResultBackIntoThisContext)(state)
+      val mapResultBackIntoThisContext = ops.map(resultAfterRunning)(converter.apply)(providedState)
+      val flattenedBackIntoThisContext: Into[Out] = ops.flatten(mapResultBackIntoThisContext)(providedState)
       flattenedBackIntoThisContext
     })
   }
@@ -110,7 +117,7 @@ sealed trait Lift[In, Out, State, Into[_]]
 
   def lift[S, F[_]](other: Lift[In, Out, S, F])(implicit converter: F -> Into, tFofD: TypeTagTree[F[Out]]): Lift[In, Out, State, Into] = {
     val liftedChain: ChainLink = immutable.Vector(other)
-    val foo = runInThisContext(other, other.runner)(converter, typeIn, tFofD, typeOut)
+    val foo = runInThisContext(other, other.runner, state)(converter, typeIn, tFofD, typeOut)
     Lift.create[In, Out, State, Into](name, liftedChain, foo, other.liftChain, state, ops)(typeState, typeIn, typeOut)
   }
 
@@ -139,15 +146,15 @@ sealed trait Lift[In, Out, State, Into[_]]
 object Lift {
   import scala.collection.immutable
 
-  private case class Build[A, D, S, F[_]](name: String, chain: ChainLink, link: Link[A, F[D]], liftChainSoFar: ChainLift, state: S, ops: LiftOps[S, F], override val asShortString: String = null)(implicit val typeState: TypeTagTree[S], val typeIn: TypeTagTree[A], val typeOut: TypeTagTree[F[D]]) extends Lift[A, D, S, F] with Named {
+  private case class Build[A, D, S, F[_]](name: String, chain: ChainLink, link: Link[A, F[D]], providedLiftChain: ChainLift, state: S, ops: LiftOps[S, F], override val asShortString: String = null)(implicit val typeState: TypeTagTree[S], val typeIn: TypeTagTree[A], val typeOut: TypeTagTree[F[D]]) extends Lift[A, D, S, F] with Named {
     val runner =
       link.runner
 
     lazy val liftChain: ChainLift =
-      if ((liftChainSoFar eq null) || liftChainSoFar.isEmpty)
+      if ((providedLiftChain eq null) || providedLiftChain.isEmpty)
         immutable.Vector(this.asInstanceOf[ChainableLift])
       else
-        this.asInstanceOf[ChainableLift] +: liftChainSoFar
+        providedLiftChain
   }
 
   private[fluxmuster4] def liftLink[A, D, S, F[_]](chained: Chained[A, D], state: S, ops: LiftOps[S, F])(implicit tOut: TypeTagTree[F[D]]): Link[A, F[D]] = {
@@ -188,7 +195,7 @@ extends LiftLike[State, Into] {
 
   def lift[A, S, F[_]](other: Lift[A, Out, S, F])(implicit converter: F -> Into, typeOut: TypeTagTree[Into[Out]], typeFofOut: TypeTagTree[F[Out]], typeIntoFofOut: TypeTagTree[Into[F[Out]]]): Lift[A, Out, State, Into] = {
     val liftedChain = immutable.Vector(other)
-    val liftedLink = runInThisContext(other, other.run)(converter, other.typeIn, other.typeOut, typeOut)
+    val liftedLink = runInThisContext(other, other.run, state)(converter, other.typeIn, other.typeOut, typeOut)
     val lift = Lift.create(name, liftedChain, liftedLink, other.liftChain, state, ops)(typeState, other.typeIn, typeOut)
     lift
   }
