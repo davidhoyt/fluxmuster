@@ -80,12 +80,17 @@ trait Step[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
   implicit lazy val toLink: Link[DownstreamIn, UpstreamOut] =
     Link(name)(toFunction)(downstream.typeIn, upstream.typeOut)
 
-  def map[A, B, C, D](fn: ((Downstream[DownstreamIn, DownstreamOut], Upstream[UpstreamIn, UpstreamOut])) => (Downstream[A, B], Upstream[C, D]))(implicit connect: DownstreamOut => A, connect2: D => UpstreamIn, connect3: B => C, tB: TypeTagTree[B], tC: TypeTagTree[C]): Step[DownstreamIn, B, C, UpstreamOut] = {
-    val (otherDown, otherUp) = fn((downstream, upstream))
-    val down = downstream andThen otherDown
-    val up = upstream compose otherUp
-    Step("<~>", down, up, connect3)
+  def map[A, B, C, D](fn: ((Downstream[DownstreamIn, DownstreamOut], Upstream[UpstreamIn, UpstreamOut])) => (Downstream[A, B], Upstream[C, D]))(implicit connect: B => C): Step[A, B, C, D] = {
+    val (mappedDown, mappedUp) = fn((downstream, upstream))
+    Step(name, mappedDown, mappedUp, connect)(mappedDown.typeOut, mappedUp.typeIn)
   }
+
+//  def flatMap[A, B, C, D](fn: Step[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] => Step[A, B, C, D])(implicit connect: DownstreamOut => A, connect2: D => UpstreamIn, connect3: B => C): Step[DownstreamIn, B, C, UpstreamOut] =
+//    combine(fn(this))
+
+  def flatMap[A, D, S, F[_]](fn: Step[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] => Lift[A, D, S, F]): Lift[A, D, S, F] =
+    ???
+    //combine(fn(this))
 
   def filter(fn: ((Downstream[DownstreamIn, DownstreamOut], Upstream[UpstreamIn, UpstreamOut])) => Boolean): Step[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] = {
     //no-op
@@ -95,7 +100,6 @@ trait Step[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
     else
       this
   }
-
 }
 
 object Step {
@@ -112,4 +116,9 @@ object Step {
 
   def apply[A, B, C, D](name: String, downstream: Downstream[A, B], upstream: Upstream[C, D], proofDownstreamCanMapToUpstream: B => C)(implicit tB: TypeTagTree[B], tC: TypeTagTree[C]): Step[A, B, C, D] =
     Build(name, downstream, upstream, Link(proofDownstreamCanMapToUpstream))
+}
+
+object Proxy {
+  def apply[A, B, C, D](name: String, downstream: Downstream[A, B], upstream: Upstream[C, D])(implicit proofDownstreamCanMapToUpstream: B => C): Step[A, B, C, D] =
+    Step(name, downstream, upstream, proofDownstreamCanMapToUpstream)(downstream.typeOut, upstream.typeIn)
 }

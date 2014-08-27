@@ -1,6 +1,6 @@
 package com.github.davidhoyt.fluxmuster4
 
-import lift.{HystrixConfiguration, Hystrix}
+import com.github.davidhoyt.fluxmuster4.lift.{Serial, Hystrix2, HystrixConfiguration, Hystrix}
 
 import com.github.davidhoyt.fluxmuster.{Macros, UnitSpec}
 
@@ -241,5 +241,99 @@ class LinkSpec extends UnitSpec {
 //      executeLiftMultipleTimes(liftLink6, times = 100) contains (-1L) should be(false)
       println(executeLiftMultipleTimes(liftLink7, times = 1000))
     }
+  }
+
+  it should "monadic" in {
+    val link3: Link[Long, Long] =
+      ((x: Long) => x + 2L).toLink("link3-a") ~>
+      ((x: Long) => x * 1L).toLink("link3-b")
+    val link4: Link[Int, Int] =
+      ((x: Int) => x * 2).toLink("link4-a") ~>
+      ((x: Int) => x - 1).toLink("link4-b")
+
+    import scala.language.higherKinds
+
+    trait Chained[In, Out] {
+
+    }
+
+    trait LinkFoo[In, Out] extends Chained[In, Out] {
+      def link[B](other: LinkFoo[Out, B]): Link[In, B] =
+        ???
+    }
+
+    object LinkFoo {
+      def apply[A, B] = new LinkFoo[A, B] {}
+    }
+
+    trait ProxyFoo[DIn, DOut, UIn, UOut] extends Chained[DIn, UOut] {
+      def combine[B, C](other: ProxyFoo[DOut, B, C, UIn]): ProxyFoo[DIn, B, C, UOut] =
+        ???
+
+      def flatMap[A, B, C, D](fn: ((LinkFoo[DIn, DOut], LinkFoo[UIn, UOut])) => Chained[A, B]): Chained[A, B] =
+        ???
+
+      def map[A, B, C, D](fn: ((LinkFoo[DIn, DOut], LinkFoo[UIn, UOut])) => (LinkFoo[A, B], LinkFoo[C, D])): ProxyFoo[A, B, C, D] =
+        ???
+    }
+
+    object ProxyFoo {
+      def apply[A, B, C, D] = new ProxyFoo[A, B, C, D] {}
+    }
+
+    trait LiftFoo[In, Out, Into[_]] extends Chained[In, Into[Out]] {
+      def map[A, D, F[_]](other: LiftFoo[In, Out, Into] => LiftFoo[A, D, F]): LiftFoo[A, D, F] =
+        ???
+
+      //Runs first (provided argument) inside of second (LiftFoo[A, D, F])
+      def flatMap[A, D, F[_]](fn: LiftFoo[In, Out, Into] => LiftFoo[A, D, F]): LiftFoo[A, D, F] =
+        ???
+    }
+
+    object LiftFoo {
+      def apply[A, D, F[_]] = new LiftFoo[A, D, F] {}
+    }
+
+    val bar =
+      ProxyFoo[Int, Int, Long, Long] flatMap { a =>
+        ProxyFoo[Int, String, String, Long] flatMap { b =>
+          LiftFoo[Int, Long, Future] flatMap { c =>
+            LiftFoo[Int, Long, Future] map { d =>
+              d
+            }
+          }
+        }
+      }
+    val foo =
+      for {
+        p1 <- ProxyFoo[Int, Int, Long, Long]
+        p2 <- ProxyFoo[Int, Int, Long, Long]
+        p3 <- ProxyFoo[Int, String, String, Long]
+        l1 <- LiftFoo[Int, Long, Future]
+        l2 <- LiftFoo[Int, Long, Future]
+        l3 <- LiftFoo[String, Long, Future]
+      } yield l3
+
+
+    val bar2 =
+      (Proxy("a", link3, link4)) flatMap { a =>
+        ((Hystrix.withFallback("", HystrixConfiguration())(2) lift a) map { b =>
+          b
+        })
+      }
+
+    val foo2 =
+      for {
+        s3 <- Proxy("Proxy1", link3, link4)
+        s4 <- Proxy("Proxy2", link3, link4)
+        s <- Serial(s4)
+        //s <- (Hystrix.withFallback("", HystrixConfiguration())(2) lift s4)
+      } yield s
+    val r = foo2.run(0).map(_.toString).get
+
+//    val foo3 =
+//      for {
+//        s <- Hystrix.withFallback("", HystrixConfiguration())(2) lift foo2
+//      }
   }
 }

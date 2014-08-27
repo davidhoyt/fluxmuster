@@ -29,6 +29,9 @@ object Hystrix {
 
 
 
+//  def apply[A, B, C, D](implicit step: Step[A, B, C, D]): Lift[A, D, State, Future] =
+//    create()
+
   def apply(configuration: HystrixConfiguration): LiftNeedsChained[_, State, Future] =
     create[Nothing](NAME, configuration, None)
 

@@ -4,7 +4,7 @@ import com.github.davidhoyt.fluxmuster.{Macros, TypeTagTree}
 
 import scala.language.higherKinds
 
-trait LiftOps[State, Into[_]] {
+trait LiftOps[State, Into[_]] extends Monadic[State, Into] {
   import scala.language.implicitConversions
 
   implicit def toState[S](instance: S)(implicit ev: S => State): State =
@@ -14,10 +14,7 @@ trait LiftOps[State, Into[_]] {
   def unsafeCastAsState[S](instance: S): State =
     instance.asInstanceOf[State]
 
-  implicit def liftRunner[A, D](chained: ChainLink, runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Into[D]
-  implicit def point[A](given: => A)(implicit state: State): Into[A]
-  implicit def flatten[A](given: Into[Into[A]])(implicit state: State): Into[A]
-  implicit def map[A, B](given: Into[A])(fn: A => B)(implicit state: State): Into[B]
+  def liftRunner[A, D](chained: ChainLink, runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Into[D]
 }
 
 sealed trait LiftLike[State, Into[_]] {
@@ -39,7 +36,7 @@ sealed trait LiftLike[State, Into[_]] {
   }
 }
 
-sealed trait Lift[In, Out, State, Into[_]]
+trait Lift[In, Out, State, Into[_]]
   extends LiftLike[State, Into]
   with Chained[In, Into[Out]]
 {
@@ -55,6 +52,11 @@ sealed trait Lift[In, Out, State, Into[_]]
   def run(in: In): Into[Out] =
     runner(in)
 
+  implicit lazy val toLink: Link[In, Into[Out]] =
+    Link(name)(run)(typeIn, typeOut)
+
+  implicit lazy val toStep: Step[In, In, In, Into[Out]] =
+    Step(name, Link.identity[In](typeIn), toLink, identity[In])(typeIn, typeIn)
 
   //TODO: Change hystrix fallback to option
 
@@ -120,6 +122,15 @@ sealed trait Lift[In, Out, State, Into[_]]
     val foo = runInThisContext(other, other.runner, state)(converter, typeIn, tFofD, typeOut)
     Lift.create[In, Out, State, Into](name, liftedChain, foo, other.liftChain, state, ops)(typeState, typeIn, typeOut)
   }
+
+
+
+  def map[A, D, S, F[_]](other: Lift[In, Out, State, Into] => Lift[A, D, S, F]): Lift[A, D, S, F] =
+    ???
+//
+//  //Runs first (provided argument) inside of second (LiftFoo[A, D, F])
+//  def flatMap[A, D, F[_]](fn: LiftFoo[In, Out, Into] => LiftFoo[A, D, F]): LiftFoo[A, D, F] =
+//    ???
 
   def asShortString: String =
     null
