@@ -1,6 +1,6 @@
 package com.github.davidhoyt.fluxmuster4
 
-import com.github.davidhoyt.fluxmuster4.lift.{Serial, Hystrix2, HystrixConfiguration, Hystrix}
+import com.github.davidhoyt.fluxmuster4.lift._
 
 import com.github.davidhoyt.fluxmuster.{Macros, UnitSpec}
 
@@ -232,24 +232,24 @@ class LinkSpec extends UnitSpec {
 //    liftLink4.liftChain.size should be (1)
 //    val liftLink5 = Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift Async(link1)
 //    val liftLink6 = Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift (Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift Async(link1))
-    val liftLink7 = (Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-3L) lift (Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-2L) lift (Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift Async(link1))))
-    println(liftLink7.liftChain)
+//    val liftLink7 = (Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-3L) lift (Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-2L) lift (Hystrix.withFallback(HystrixConfiguration(timeout = 1.second))(-1L) lift Async(link1))))
+//    println(liftLink7.liftChain)
 
     withClue("Hystrix fallback should not be used: ") {
 //      executeLiftMultipleTimes(liftLink4, times = 100) contains (-1L) should be(false)
 //      executeLiftMultipleTimes(liftLink5, times = 100) contains (-1L) should be(false)
 //      executeLiftMultipleTimes(liftLink6, times = 100) contains (-1L) should be(false)
-      println(executeLiftMultipleTimes(liftLink7, times = 1000))
+//      println(executeLiftMultipleTimes(liftLink7, times = 1000))
     }
   }
 
   it should "monadic" in {
     val link3: Link[Long, Long] =
-      ((x: Long) => x + 2L).toLink("link3-a") ~>
-      ((x: Long) => x * 1L).toLink("link3-b")
+      ((x: Long) => {println("link3-a"); x + 2L}).toLink("link3-a") ~>
+      ((x: Long) => {println("link3-b"); x * 1L}).toLink("link3-b")
     val link4: Link[Int, Int] =
-      ((x: Int) => x * 2).toLink("link4-a") ~>
-      ((x: Int) => x - 1).toLink("link4-b")
+      ((x: Int) => {println("link4-a"); x * 2}).toLink("link4-a") ~>
+      ((x: Int) => {println("link4-b"); x - 1}).toLink("link4-b")
 
     import scala.language.higherKinds
 
@@ -294,32 +294,32 @@ class LinkSpec extends UnitSpec {
       def apply[A, D, F[_]] = new LiftFoo[A, D, F] {}
     }
 
-    val bar =
-      ProxyFoo[Int, Int, Long, Long] flatMap { a =>
-        ProxyFoo[Int, String, String, Long] flatMap { b =>
-          LiftFoo[Int, Long, Future] flatMap { c =>
-            LiftFoo[Int, Long, Future] map { d =>
-              d
-            }
-          }
-        }
-      }
-    val foo =
-      for {
-        p1 <- ProxyFoo[Int, Int, Long, Long]
-        p2 <- ProxyFoo[Int, Int, Long, Long]
-        p3 <- ProxyFoo[Int, String, String, Long]
-        l1 <- LiftFoo[Int, Long, Future]
-        l2 <- LiftFoo[Int, Long, Future]
-        l3 <- LiftFoo[String, Long, Future]
-      } yield l3
+//    val bar =
+//      ProxyFoo[Int, Int, Long, Long] flatMap { a =>
+//        ProxyFoo[Int, String, String, Long] flatMap { b =>
+//          LiftFoo[Int, Long, Future] flatMap { c =>
+//            LiftFoo[Int, Long, Future] map { d =>
+//              d
+//            }
+//          }
+//        }
+//      }
+//    val foo =
+//      for {
+//        p1 <- ProxyFoo[Int, Int, Long, Long]
+//        p2 <- ProxyFoo[Int, Int, Long, Long]
+//        p3 <- ProxyFoo[Int, String, String, Long]
+//        l1 <- LiftFoo[Int, Long, Future]
+//        l2 <- LiftFoo[Int, Long, Future]
+//        l3 <- LiftFoo[String, Long, Future]
+//      } yield l3
 
 
     val bar2 =
-      (Proxy("a", link3, link4)) flatMap { a =>
-        ((Hystrix.withFallback("", HystrixConfiguration())(2) lift a) map { b =>
-          b
-        })
+      Proxy("a", link3, link4) flatMap { a =>
+        Proxy("b", link3, link4) flatMap { b =>
+          Serial(b)
+        }
       }
 
     val foo2 =
@@ -328,8 +328,17 @@ class LinkSpec extends UnitSpec {
         s4 <- Proxy("Proxy2", link3, link4)
         s <- Serial(s4)
         //s <- (Hystrix.withFallback("", HystrixConfiguration())(2) lift s4)
-      } yield s
+      } yield {
+//        println(s4.toShortString)
+//        println(s)
+        s
+      }
+//    println(foo2)
+//    println(foo2.chain.toShortString)
+//    println(foo2.chain.head.chain.toShortString)
+//    println(foo2.liftChain.toShortString)
     val r = foo2.run(0).map(_.toString).get
+    println(r)
 
 //    val foo3 =
 //      for {

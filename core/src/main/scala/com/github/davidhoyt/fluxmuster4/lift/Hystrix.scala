@@ -32,58 +32,74 @@ object Hystrix {
 //  def apply[A, B, C, D](implicit step: Step[A, B, C, D]): Lift[A, D, State, Future] =
 //    create()
 
-  def apply(configuration: HystrixConfiguration): LiftNeedsChained[_, State, Future] =
-    create[Nothing](NAME, configuration, None)
+  def apply[A, D](configuration: HystrixConfiguration, chained: Chained[A, D])
+                 (implicit typeOut: TypeTagTree[Future[D]]): Lift[A, D, State, Future] =
+    create(NAME, configuration, chained, None)
 
-  def apply(name: String, configuration: HystrixConfiguration): LiftNeedsChained[_, State, Future] =
-    create[Nothing](name, configuration, None)
+  def apply[A, D](name: String, configuration: HystrixConfiguration, chained: Chained[A, D])
+                 (implicit typeOut: TypeTagTree[Future[D]]): Lift[A, D, State, Future] =
+    create(name, configuration, chained, None)
 
-  def withFallback[T](configuration: HystrixConfiguration)
-                     (fallback: => T): LiftNeedsChained[T, State, Future] =
-    create(NAME, configuration, Some(() => fallback))
+  def withFallback[A, D](configuration: HystrixConfiguration, chained: Chained[A, D])
+                        (fallback: => D)
+                        (implicit typeOut: TypeTagTree[Future[D]]): Lift[A, D, State, Future] =
+    create(NAME, configuration, chained, Some(() => fallback))
 
-  def withFallback[T](name: String, configuration: HystrixConfiguration)
-                     (fallback: => T): LiftNeedsChained[T, State, Future] =
-    create(name, configuration, Some(() => fallback))
+  def withFallback[A, D](name: String, configuration: HystrixConfiguration, chained: Chained[A, D])
+                        (fallback: => D)
+                        (implicit typeOut: TypeTagTree[Future[D]]): Lift[A, D, State, Future] =
+    create(name, configuration, chained, Some(() => fallback))
 
 
 
-  private def create[T](providedName: String, configuration: HystrixConfiguration, fallback: => Option[() => T]): LiftNeedsChained[T, State, Future] = {
-
-    import scala.collection.immutable
+  private def create[A, D](providedName: String, configuration: HystrixConfiguration, chained: Chained[A, D], fallback: => Option[() => D])(implicit typeOut: TypeTagTree[Future[D]]): Lift[A, D, State, Future] = {
 
     import scala.language.higherKinds
 
     require(configuration.timeout.isFinite(), s"Hystrix timeout must be a finite amount")
 
-    val providedTypeState = typeState
-
-    new LiftNeedsChained[T, State, Future] with Named {
-      val ops       = HystrixOps
-      val state     = State(fallback, configuration)
-      val typeState = providedTypeState
-      val name      = providedName
-
-
-      override def lift[A, S, F[_]](other: Lift[A, T, S, F])(implicit converter: F -> Future, typeOut: TypeTagTree[Future[T]], typeFofOut: TypeTagTree[F[T]], typeIntoFofOut: TypeTagTree[Future[F[T]]]): Lift[A, T, State, Future] = {
-        //The fallback must also be lifted up the chain so that it can be applied
-        //to the resulting lifted value if necessary.
-        val liftedFallback = other.liftChain.foldLeft(state.fallback) {
-          case (fall, part) =>
-            fall map (f => () => part.ops.point(f())(part.ops.unsafeCastAsState(part.state)))
-        }
-
-        //Create a new state where the fallback has been properly lifted into
-        //context and which should be used for runs.
-        val newState = state.copy(fallback = liftedFallback)
-
-        val liftedChain = immutable.Vector(other)
-        val liftedLink = runInThisContext(other, other.run, newState)(converter, other.typeIn, other.typeOut, typeOut)
-
-        val lift = Lift.create(name, liftedChain, liftedLink, other.liftChain, state, HystrixOps)(typeState, other.typeIn, typeOut)
-        lift
+    def mapStateOnLift(state: State, other: ChainableLift): State = {
+      //The fallback must also be lifted up the chain so that it can be applied
+      //to the resulting lifted value if necessary.
+      val liftedFallback = other.liftChain.foldLeft(state.fallback) {
+        case (fall, part) =>
+          fall map (f => () => part.ops.point(f())(part.ops.unsafeCastAsState(part.state)))
       }
+
+      //Create a new state where the fallback has been properly lifted into
+      //context and which should be used for runs.
+      val newState = state.copy(fallback = liftedFallback)
+      newState
     }
+
+    Lift.withChained(providedName, chained, EmptyChainLift, State(fallback, configuration), HystrixOps, mapStateOnLift _)(typeState, chained.typeIn, typeOut)
+
+//    new LiftNeedsChained[T, State, Future] with Named {
+//      val ops       = HystrixOps
+//      val state     = State(fallback, configuration)
+//      val typeState = providedTypeState
+//      val name      = providedName
+//
+//
+//      override def lift[A, S, F[_]](other: Lift[A, T, S, F])(implicit converter: F -> Future, typeOut: TypeTagTree[Future[T]], typeFofOut: TypeTagTree[F[T]], typeIntoFofOut: TypeTagTree[Future[F[T]]]): Lift[A, T, State, Future] = {
+//        //The fallback must also be lifted up the chain so that it can be applied
+//        //to the resulting lifted value if necessary.
+//        val liftedFallback = other.liftChain.foldLeft(state.fallback) {
+//          case (fall, part) =>
+//            fall map (f => () => part.ops.point(f())(part.ops.unsafeCastAsState(part.state)))
+//        }
+//
+//        //Create a new state where the fallback has been properly lifted into
+//        //context and which should be used for runs.
+//        val newState = state.copy(fallback = liftedFallback)
+//
+//        val liftedChain = immutable.Vector(other)
+//        val liftedLink = runInThisContext(other, other.run, newState)(converter, other.typeIn, other.typeOut, typeOut)
+//
+//        val lift = Lift.create(name, liftedChain, liftedLink, other.liftChain, state, HystrixOps)(typeState, other.typeIn, typeOut)
+//        lift
+//      }
+//    }
   }
 
   private object HystrixOps extends LiftOps[State, Future] {

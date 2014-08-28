@@ -1,6 +1,8 @@
 package com.github.davidhoyt
 
-package object fluxmuster4 {
+import com.github.davidhoyt.fluxmuster5.runner.RunnerOps
+
+package object fluxmuster5 {
   import scala.collection._
   import scala.concurrent.{ExecutionContext, Future}
   import com.github.davidhoyt.fluxmuster.TypeTagTree
@@ -20,11 +22,12 @@ package object fluxmuster4 {
   type ChainLink = immutable.Vector[ChainableLink]
   val EmptyChainLink = immutable.Vector[ChainableLink]()
 
-  type ChainableLift =
-    Lift[_, _, _, _] with Named
+  import runner.Runner
+  type ChainableRunner[X[_]] =
+    Runner[_, _, _, X] with Named
 
-  type ChainLift = immutable.Vector[ChainableLift]
-  val EmptyChainLift = immutable.Vector[ChainableLift]()
+  type ChainRunner[X[_]] = immutable.Vector[ChainableRunner[X]]
+  def EmptyChainRunner[X[_]] = immutable.Vector[ChainableRunner[X]]()
 
   type SideEffecting[Out] = Out => Unit
   type ChainSideEffects[Out] = immutable.Vector[SideEffecting[Out]]
@@ -33,8 +36,8 @@ package object fluxmuster4 {
   type FnChainLink =
     (ChainableLink, ChainLink, ChainLink) => ChainLink
 
-  type FnChainLift =
-    (ChainableLift, ChainLift, ChainLift) => ChainLift
+  type FnChainRunner[X[_]] =
+    (ChainableRunner[X], ChainRunner[X], ChainRunner[X]) => ChainRunner[X]
 
   val typeUnit =
     typeTagTreeOf[Unit]
@@ -94,25 +97,25 @@ package object fluxmuster4 {
       chainLink.map(_.asShortString).mkString(", ")
   }
 
-  implicit class ChainLiftEnhancements(val chainLift: ChainLift) extends AnyVal {
+  implicit class ChainRunnerEnhancements[F[_]](val chainRunner: ChainRunner[F]) extends AnyVal {
     def asDefaultString =
-      chainLift.map(_.asDefaultString).mkString(", ")
+      chainRunner.map(_.asDefaultString).mkString(", ")
 
     def asShortString =
-      chainLift.map(_.asShortString).mkString(", ")
+      chainRunner.map(_.asShortString).mkString(", ")
   }
 
-  implicit class Tuple2Enhancements[A, B, C, D](val t: ((Downstream[A, B], Upstream[C, D]))) extends AnyVal {
-    def toStep(implicit proof: B => C): Step[A, B, C, D] = {
-      val (down, up) = t
-      Step("<~>", down, up, proof)(down.typeOut, up.typeIn)
-    }
-  }
+//  implicit class Tuple2Enhancements[A, B, C, D](val t: ((Downstream[A, B], Upstream[C, D]))) extends AnyVal {
+//    def toStep(implicit proof: B => C): Step[A, B, C, D] = {
+//      val (down, up) = t
+//      Step("<~>", down, up, proof)(down.typeOut, up.typeIn)
+//    }
+//  }
 
   def typeTagTreeOf[T](implicit ttt: TypeTagTree[T]) =
     TypeTagTree.typeTagTreeOf[T](ttt)
 
-  implicit object FutureLiftOps extends LiftOps[ExecutionContext, Future] {
+  implicit object FutureRunnerOps extends RunnerOps[ExecutionContext, Future] {
     import scala.concurrent.Promise
     import scala.util.control.NonFatal
 

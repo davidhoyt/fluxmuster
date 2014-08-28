@@ -85,12 +85,15 @@ trait Step[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
     Step(name, mappedDown, mappedUp, connect)(mappedDown.typeOut, mappedUp.typeIn)
   }
 
-//  def flatMap[A, B, C, D](fn: Step[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] => Step[A, B, C, D])(implicit connect: DownstreamOut => A, connect2: D => UpstreamIn, connect3: B => C): Step[DownstreamIn, B, C, UpstreamOut] =
-//    combine(fn(this))
+  //def map[A, D, S, F[_]](fn: ((Downstream[DownstreamIn, DownstreamOut], Upstream[UpstreamIn, UpstreamOut])) => Lift[A, D, S, F]): Lift[A, D, S, F] =
+  //  fn((downstream, upstream))
 
-  def flatMap[A, D, S, F[_]](fn: Step[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] => Lift[A, D, S, F]): Lift[A, D, S, F] =
-    ???
-    //combine(fn(this))
+  def flatMap[A, D, S, F[_]](fn: Step[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] => Lift[A, D, S, F])(implicit connect: D => DownstreamIn, typeFOfUpstreamOut: TypeTagTree[F[UpstreamOut]]): Lift[A, UpstreamOut, S, F] = {
+    val f = fn(this)
+    val l = this.toLink
+
+    fn(this).andThen(this)
+  }
 
   def filter(fn: ((Downstream[DownstreamIn, DownstreamOut], Upstream[UpstreamIn, UpstreamOut])) => Boolean): Step[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] = {
     //no-op
