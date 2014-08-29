@@ -22,26 +22,60 @@ class RunnerSpec extends UnitSpec {
     ((x: Int) => {println("link4-a"); x * 2}).toLink("link4-a") ~>
     ((x: Int) => {println("link4-b"); x - 1}).toLink("link4-b")
 
+  val link5: Link[Int, String] =
+    ((x: Int) => {println("link5-a"); x.toString}).toLink("link5-a")
+
   implicit def intToString(x: Int) = x.toString
   implicit def longToInt(x: Long) = x.toInt
 
   it should "do this" in {
+    val baz =
+      Serial(link2 ~> link3)
+    println(baz.run("0"))
+
     val bar =
       Proxy("p1", link2 ~> link3, link4) flatMap { a =>
         Proxy("p2", link3, link4) flatMap { b =>
-          Serial(b)
+          Serial(b) map { c =>
+            c
+          }
         }
       }
 
     val foo =
       for {
-        p1: ProxyNeedsProof[String, Long, Int, Int] <- Proxy("p1", link2 ~> link3, link4)
+        p1: ProxyNeedsProof[String, Long, Int, String] <- Proxy("p1", link2 ~> link3, link4 ~> link5) if true
         p2: ProxyNeedsProof[Long, Long, Int, Int] <- Proxy("p2", link3, link4)
+        p2: ProxyNeedsProof[Long, Long, Int, Int] <- Proxy("p3", link3, link4)
+        //Only thing we know is DownstreamOut and UpstreamIn at this point
+        //Same for subsequent Runners (Lifts)
         r1 <- Serial(p2)
+        r2 <- Serial(r1)
+      } yield r2
+
+    val simpleRunnerMapWithLink =
+      for {
+        r1 <- Serial(link2 ~> link3)
       } yield r1
 
+    val simpleRunnerFlatMapDesugared =
+      Serial(link2 ~> link3) flatMap { a =>
+        Serial(a) map { b =>
+          b
+        }
+      }
+
+    val simpleRunnerFlatMap =
+      for {
+        r1 <- Serial(link2 ~> link3)
+        r2 <- Serial(r1)
+      } yield r2
+
+    println(foo.runChain.asShortString)
     println(foo.chain.asDefaultString)
     val r = foo.run("0")
     println(r)
+    val r2 = foo.runChain("0")
+    println(r2)
   }
 }

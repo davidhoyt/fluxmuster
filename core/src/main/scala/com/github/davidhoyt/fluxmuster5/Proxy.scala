@@ -30,19 +30,13 @@ trait ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] exte
     Proxy(name, mappedDown, mappedUp)
   }
 
-  def flatMap[A, D, S, F[_]](fn: ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] => Runner[A, D, S, F])(implicit proof: DownstreamOut => UpstreamIn, connect: UpstreamOut => A, connect2: UpstreamOut => D, typeFOfA: TypeTagTree[F[A]], typeFOfDownstreamIn: TypeTagTree[F[DownstreamIn]]): Runner[DownstreamIn, D, S, F] = {
-    val next = withProof.toLink
-    val runner = fn(this)
-    if (!runner.rewireOnFlatMap)
-      runner.linkToBeginning(next)
-    else
-      runner.replaceLink(next)
-  }
+  def flatMap[A, B, C, D, S, F[_]](fn: ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] => Runner[A, B, C, D, S, F])(implicit proof: DownstreamOut => UpstreamIn, a: DownstreamOut => A, b: DownstreamOut => B, c: C => UpstreamIn, d: D => UpstreamIn, typeFOfUpstreamOut: TypeTagTree[F[UpstreamOut]]): Runner[DownstreamIn, B, C, UpstreamOut, S, F] =
+    fn(this).combineInReverse(withProof)
 
-  def filter(fn: ((Downstream[DownstreamIn, DownstreamOut], Upstream[UpstreamIn, UpstreamOut])) => Boolean): ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] = {
+  def filter(fn: ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] => Boolean): ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] = {
     //no-op
     //Still call the function in case it's side-effecting in some way. :`(
-    if (fn((downstream, upstream)))
+    if (fn(this))
       this
     else
       this

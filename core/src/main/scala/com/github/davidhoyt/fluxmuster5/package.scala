@@ -24,7 +24,7 @@ package object fluxmuster5 {
 
   import runner.Runner
   type ChainableRunner[X[_]] =
-    Runner[_, _, _, X] with Named
+    Runner[_, _, _, _, _, X] with Named
 
   type ChainRunner[X[_]] = immutable.Vector[ChainableRunner[X]]
   def EmptyChainRunner[X[_]] = immutable.Vector[ChainableRunner[X]]()
@@ -70,6 +70,9 @@ package object fluxmuster5 {
   implicit class LinkEnhancements[In, Out](val link: Link[In, Out]) extends AnyVal {
     def toLink: Link[In, Out] =
       link
+
+    def toProxy: Proxy[In, In, Out, Out] =
+      link.toProxy
   }
 
   implicit class FunctionEnhancements[In, Out](val fn: In => Out) extends AnyVal {

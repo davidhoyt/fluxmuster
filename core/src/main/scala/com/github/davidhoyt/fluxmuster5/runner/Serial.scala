@@ -5,6 +5,8 @@ import com.github.davidhoyt.fluxmuster5._
 
 import scala.util.Try
 
+import scala.language.higherKinds
+
 object Serial {
   val NAME = Macros.simpleNameOf[Serial.type]
 
@@ -22,9 +24,17 @@ object Serial {
       given map fn
   }
 
-  def apply[A, D](link: Link[A, D])(implicit typeOut: TypeTagTree[Try[D]]): Runner[A, D, Unit, Try] =
-    Runner.withUnliftedLink(NAME, link, EmptyChainRunner, (), SerialOps, rewireOnFlatMap = true)(typeUnit, link.typeIn, typeOut)
+  def apply[A, B, C, D, S, F[_]](runner: Runner[A, B, C, D, S, F]): Runner[A, A, D, D, Unit, Try] = {
+    //run in this context
+    ???
+  }
 
-  def apply[A, B, C, D](proxy: ProxyNeedsProof[A, B, C, D])(implicit proof: B => C, typeOut: TypeTagTree[Try[D]]): Runner[A, D, Unit, Try] =
-    apply(Proxy(proxy.name, proxy.downstream, proxy.upstream, proof)(proxy.downstream.typeOut, proxy.upstream.typeIn).toLink)
+  def apply[A, B, C, D](proxy: Proxy[A, B, C, D])(implicit typeOut: TypeTagTree[Try[D]]): Runner[A, B, C, D, Unit, Try] =
+    Runner.withUnliftedProxy(NAME, proxy, EmptyChainRunner, (), SerialOps, rewireOnFlatMap = true)
+
+  def apply[A, D](link: Link[A, D])(implicit typeOut: TypeTagTree[Try[D]]): Runner[A, A, D, D, Unit, Try] =
+    apply(link.toProxy)
+
+  def apply[A, B, C, D](proxy: ProxyNeedsProof[A, B, C, D])(implicit proof: B => C, typeOut: TypeTagTree[Try[D]]): Runner[A, B, C, D, Unit, Try] =
+    apply(proxy.withProof)
 }

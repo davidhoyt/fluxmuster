@@ -5,8 +5,8 @@ import com.github.davidhoyt.fluxmuster5._
 
 import scala.language.higherKinds
 
-trait Runner[In, Out, State, Into[_]]
-  extends Chained[In, Into[Out]]
+trait Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, Into[_]]
+  extends Chained[DownstreamIn, UpstreamOut]
 {
   self: Named =>
 
@@ -18,21 +18,22 @@ trait Runner[In, Out, State, Into[_]]
   implicit val state: State
   implicit val typeState: TypeTagTree[State]
   val runChain: ChainRunner[Into]
+  val link: Link[DownstreamIn, Into[UpstreamOut]]
 
   val rewireOnFlatMap = false
-  val originalLink: Link[In, Out]
+  val originalProxy: Proxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
 
-  def apply[A, B](in: A)(implicit convert: A => In): Into[Out] =
+  def apply[A, B](in: A)(implicit convert: A => DownstreamIn): Into[UpstreamOut] =
     run(convert(in))
 
-  def run(in: In): Into[Out] =
-    runner(in)
+  def run(in: DownstreamIn): Into[UpstreamOut] =
+    link.run(in)
 
-  implicit lazy val toLink: Link[In, Into[Out]] =
-    Link(name)(run)(typeIn, typeOut)
+  implicit lazy val toLink: Link[DownstreamIn, Into[UpstreamOut]] =
+    link
 
-  implicit lazy val toProxy: Proxy[In, In, In, Into[Out]] =
-    Proxy(name, Link.identity[In](typeIn), toLink, identity[In])(typeIn, typeIn)
+  implicit lazy val toProxy: Proxy[DownstreamIn, DownstreamIn, Into[UpstreamOut], Into[UpstreamOut]] =
+    Proxy(name, Link.identity[DownstreamIn](link.typeIn), Link.identity[Into[UpstreamOut]](link.typeOut), run)(link.typeIn, link.typeOut)
 
   protected def mapStateOnRun(state: State, other: ChainableRunner[Into]): State =
     state
@@ -50,58 +51,63 @@ trait Runner[In, Out, State, Into[_]]
     })
   }
 
-  private[fluxmuster5] def replaceLink[A, D](link: Link[A, D])(implicit proof: D => Out): Runner[A, Out, State, Into] = {
-    Runner.withUnliftedLink(name, link.map(proof)(originalLink.typeOut), EmptyChainRunner[Into], state, ops, rewireOnFlatMap = false, mapStateOnRun _)(typeState, link.typeIn, typeOut)
+  def combineInReverse[A, B, C, D](proxy: Proxy[A, B, C, D])(implicit a: B => DownstreamIn, b: B => DownstreamOut, c: UpstreamIn => C, d: UpstreamOut => C, typeIntoOfD: TypeTagTree[Into[D]]): Runner[A, DownstreamOut, UpstreamIn, D, State, Into] = {
+    def replaceWith = {
+      val mappedProxy =
+        proxy.map {
+          case (down, up) =>
+            (down.map(b)(originalProxy.downstream.typeOut), c.toLink(originalProxy.upstream.typeIn, proxy.upstream.typeIn) andThen up )
+        }
+        .withProof(originalProxy.proofDownstreamCanMapToUpstream.toFunction)
+
+      Runner.withUnliftedProxy(name, mappedProxy, EmptyChainRunner[Into], state, ops, rewireOnFlatMap = false, mapStateOnRun _)
+    }
+
+    def combineWithHead = {
+      import originalProxy.proofDownstreamCanMapToUpstream.toFunction
+
+      val newMappedProxy: Proxy[A, DownstreamOut, UpstreamIn, D] =
+        proxy combine originalProxy
+
+      val fnNewMappedLink: A => D =
+        newMappedProxy.toFunction
+
+      val newRunLink: Link[A, Into[D]] =
+        Link(ops.liftRunner(newMappedProxy.chain, newMappedProxy.runner)(state, newMappedProxy.downstream.typeIn, newMappedProxy.upstream.typeOut))(proxy.downstream.typeIn, typeIntoOfD)
+
+      //Shouldn't be lifted already!!
+      //It should run in the lifted context of the runner
+      //should be Long => Int, *not* Long => Try[Int]
+      val liftedChainLink: ChainLink = newMappedProxy.chain
+      val liftedRunChain: ChainRunner[Into] = runChain //No change to list of Runner (lift) instances
+
+      Runner.withLink(name, liftedChainLink, newRunLink, newMappedProxy, liftedRunChain, state, ops, rewireOnFlatMap = false, mapStateOnRun _)
+    }
+
+    if (rewireOnFlatMap)
+      replaceWith
+    else
+      combineWithHead
   }
 
-  private[fluxmuster5] def linkToBeginning[A, D](link: Link[A, D])(implicit proof: D => In, typeIntoOfA: TypeTagTree[Into[A]], typeIntoOfIn: TypeTagTree[Into[In]]): Runner[A, Out, State, Into] = {
-    println(chain.asDefaultString)
-//Need to use *proxy* everywhere!!!!!!!
-    val originalRunner: In => Out =
-      originalLink.toFunction
-
-    val linkRunner: A => D =
-      link.toFunction
-
-    val newMappedLink: Link[A, Out] =
-      link ~> originalLink
-
-    val fnNewMappedLink: A => Out =
-      newMappedLink.toFunction
-
-    val newRunLink: Link[A, Into[Out]] =
-      Link(ops.liftRunner(newMappedLink.chain, newMappedLink.runner)(state, newMappedLink.typeIn, newMappedLink.typeOut))(newMappedLink.typeIn, typeOut)
-
-    val newRunner: A => Into[Out] =
-      newRunLink.toFunction
-
-    val newChainLink: Link[Into[A], Into[In]] =
-      Link((first: Into[A]) => {
-        val second: Into[D] = ops.map(first)(linkRunner)
-        val third: Into[In] = ops.map(second)(proof)
-        third
-      })(typeIntoOfA, typeIntoOfIn)
-
-    val liftedChainLink: ChainLink = newChainLink +: chain //Prepend this link
-    val liftedRunChain: ChainRunner[Into] = runChain //No change to list of Runner (lift) instances
-
-    Runner.withLink(name, liftedChainLink, newRunLink, newMappedLink, liftedRunChain, state, ops, rewireOnFlatMap = false, mapStateOnRun _)(typeState, link.typeIn, typeOut)
-  }
-
-  def map[A, D, S, F[_]](fn: Runner[In, Out, State, Into] => Runner[A, D, S, F]): Runner[A, D, S, F] =
+  def map[A, B, C, D, S, F[_]](fn: Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, Into] => Runner[A, B, C, D, S, F]): Runner[A, B, C, D, S, F] =
     fn(this)
+
+  def flatMap[A, B, C, D, S, F[_]](fn: Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, Into] => Runner[A, B, C, D, S, F]): Runner[A, B, C, D, S, F] = {
+    fn(this)
+  }
 
   def asShortString: String =
     null
 
-  val asDefaultString = {
+  lazy val asDefaultString = {
     val in = typeIn.toShortString
     val out = typeOut.toShortString
 
     s"$name[$in, $out]"
   }
 
-  val toShortString = {
+  lazy val toShortString = {
     val short = asShortString
     if (short ne null)
       short
@@ -116,9 +122,15 @@ trait Runner[In, Out, State, Into[_]]
 object Runner {
   import scala.collection.immutable
 
-  private case class Build[A, D, S, F[_]](name: String, chain: ChainLink, link: Link[A, F[D]], originalLink: Link[A, D], providedChainRunner: ChainRunner[F], state: S, ops: RunnerOps[S, F], override val rewireOnFlatMap: Boolean, mapStateOnRun: (S, ChainableRunner[F]) => S, override val asShortString: String = null)(implicit val typeState: TypeTagTree[S], val typeIn: TypeTagTree[A], val typeOut: TypeTagTree[F[D]]) extends Runner[A, D, S, F] with Named {
+  private case class Build[A, B, C, D, S, F[_]](name: String, chain: ChainLink, link: Link[A, F[D]], originalProxy: Proxy[A, B, C, D], providedChainRunner: ChainRunner[F], state: S, ops: RunnerOps[S, F], override val rewireOnFlatMap: Boolean, mapStateOnRun: (S, ChainableRunner[F]) => S, override val asShortString: String = null)(implicit val typeState: TypeTagTree[S]) extends Runner[A, B, C, D, S, F] with Named {
+    val typeIn =
+      originalProxy.downstream.typeIn
+
+    val typeOut =
+      originalProxy.upstream.typeOut
+
     val runner =
-      link.runner
+      originalProxy.runner
 
     lazy val runChain: ChainRunner[F] =
       if ((providedChainRunner eq null) || providedChainRunner.isEmpty)
@@ -127,20 +139,21 @@ object Runner {
         providedChainRunner
   }
 
-  private[fluxmuster5] def liftLink[A, D, S, F[_]](chained: Chained[A, D], state: S, ops: RunnerOps[S, F])(implicit tOut: TypeTagTree[F[D]]): Link[A, F[D]] = {
+  private[fluxmuster5] def liftChained[A, D, S, F[_]](chained: Chained[A, D], state: S, ops: RunnerOps[S, F])(implicit tOut: TypeTagTree[F[D]]): Link[A, F[D]] = {
     val chain = chained.chain
     val runner = chained.runner
     val liftedRunner = Link(ops.liftRunner[A, D](chain, runner)(state, chained.typeIn, chained.typeOut))(chained.typeIn, tOut)
     liftedRunner
   }
 
-  def withLink[A, D, S, F[_]](name: String, chain: ChainLink, link: Link[A, F[D]], originalLink: Link[A, D], runChain: ChainRunner[F], state: S, ops: RunnerOps[S, F], rewireOnFlatMap: Boolean = false, mapStateOnRun: (S, ChainableRunner[F]) => S = (s: S, _: ChainableRunner[F]) => s)(implicit tState: TypeTagTree[S], tIn: TypeTagTree[A], tOut: TypeTagTree[F[D]]): Runner[A, D, S, F] =
-    Build[A, D, S, F](name, chain, link, originalLink, runChain, state, ops, rewireOnFlatMap, mapStateOnRun)(tState, tIn, tOut)
+  def withLink[A, B, C, D, S, F[_]](name: String, chain: ChainLink, link: Link[A, F[D]], originalProxy: Proxy[A, B, C, D], runChain: ChainRunner[F], state: S, ops: RunnerOps[S, F], rewireOnFlatMap: Boolean = false, mapStateOnRun: (S, ChainableRunner[F]) => S = (s: S, _: ChainableRunner[F]) => s)(implicit typeState: TypeTagTree[S]): Runner[A, B, C, D, S, F] =
+    Build[A, B, C, D, S, F](name, chain, link, originalProxy, runChain, state, ops, rewireOnFlatMap, mapStateOnRun)(typeState)
 
-  def withUnliftedLink[A, D, S, F[_]](name: String, link: Link[A, D], runChain: ChainRunner[F], state: S, ops: RunnerOps[S, F], rewireOnFlatMap: Boolean = false, mapStateOnRun: (S, ChainableRunner[F]) => S = (s: S, _: ChainableRunner[F]) => s)(implicit typeState: TypeTagTree[S], typeIn: TypeTagTree[A], typeOut: TypeTagTree[F[D]]): Runner[A, D, S, F] = {
-    val liftedRunner = liftLink(link, state, ops)
-    val liftedChain = immutable.Vector(liftedRunner)
-    val lifted = withLink[A, D, S, F](name, liftedChain, liftedRunner, link, runChain, state, ops, rewireOnFlatMap, mapStateOnRun)
+  def withUnliftedProxy[A, B, C, D, S, F[_]](name: String, proxy: Proxy[A, B, C, D], runChain: ChainRunner[F], state: S, ops: RunnerOps[S, F], rewireOnFlatMap: Boolean = false, mapStateOnRun: (S, ChainableRunner[F]) => S = (s: S, _: ChainableRunner[F]) => s)(implicit typeState: TypeTagTree[S], typeFOfD: TypeTagTree[F[D]]): Runner[A, B, C, D, S, F] = {
+    val proxyLink = proxy.toLink
+    val liftedRunner = liftChained(proxyLink, state, ops)
+    val liftedChain = immutable.Vector(proxy.downstream, proxy.proofDownstreamCanMapToUpstream, proxy.upstream)
+    val lifted = withLink[A, B, C, D, S, F](name, liftedChain, liftedRunner, proxy, runChain, state, ops, rewireOnFlatMap, mapStateOnRun)
     lifted
   }
 }
