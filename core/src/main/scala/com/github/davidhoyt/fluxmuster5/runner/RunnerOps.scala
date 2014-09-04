@@ -22,4 +22,10 @@ trait RunnerOps[State, Into[_]] {
 
   def flatMap[A, B, G[_]](given: Into[A])(fn: A => G[B])(implicit state: State, converter: G -> Into): Into[B] =
     flatten(map(map(given)(fn)(state))(converter.apply)(state))(state)
+
+  def asChainableOps: ChainableOps =
+    this.asInstanceOf[ChainableOps]
+
+  def toChainOps: ChainOps =
+    newChainOps(asChainableOps)
 }

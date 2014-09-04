@@ -9,7 +9,7 @@ trait ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] exte
   val downstream: Downstream[DownstreamIn, DownstreamOut]
   val upstream: Upstream[UpstreamIn, UpstreamOut]
 
-  def withProof(implicit proofDownstreamCanMapToUpstream: DownstreamOut => UpstreamIn): Proxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] =
+  implicit def withProof(implicit proofDownstreamCanMapToUpstream: DownstreamOut => UpstreamIn): Proxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] =
     Proxy(name, downstream, upstream, proofDownstreamCanMapToUpstream)(downstream.typeOut, upstream.typeIn)
 
   def runProxy[A](in: A)(implicit proofDownstreamCanMapToUpstream: DownstreamOut => UpstreamIn, convertIn: A => DownstreamIn): UpstreamOut = {
