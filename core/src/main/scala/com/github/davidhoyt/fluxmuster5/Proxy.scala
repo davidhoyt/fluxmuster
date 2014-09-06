@@ -30,7 +30,7 @@ trait ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] exte
     Proxy(name, mappedDown, mappedUp)
   }
 
-  def flatMap[A, B, C, D, S, F[_]](fn: ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] => Runner[A, B, C, D, S, F])(implicit proof: DownstreamOut => UpstreamIn, a: DownstreamOut => A, b: DownstreamOut => B, c: C => UpstreamIn, d: D => UpstreamIn, typeFOfUpstreamOut: TypeTagTree[F[UpstreamOut]]): Runner[DownstreamIn, B, C, UpstreamOut, S, F] =
+  def flatMap[A, B, C, D, S, F[_], G[_]](fn: ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] => Runner[A, B, C, D, S, F, G])(implicit proof: DownstreamOut => UpstreamIn, a: DownstreamOut => A, b: DownstreamOut => B, c: C => UpstreamIn, d: D => UpstreamIn, typeFofUpstreamOut: TypeTagTree[F[UpstreamOut]], typeGOfUpstreamOut: TypeTagTree[G[UpstreamOut]]): Runner[DownstreamIn, B, C, UpstreamOut, S, F, G] =
     fn(this).combineInReverse(withProof)
 
   def filter(fn: ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] => Boolean): ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] = {

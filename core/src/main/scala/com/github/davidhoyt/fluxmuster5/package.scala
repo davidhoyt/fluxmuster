@@ -7,6 +7,7 @@ package object fluxmuster5 {
   import scala.concurrent.{ExecutionContext, Future}
   import scala.util.Try
   import com.github.davidhoyt.fluxmuster.TypeTagTree
+  import runner._
 
   import scala.language.higherKinds
   import scala.language.existentials
@@ -18,13 +19,47 @@ package object fluxmuster5 {
   type Upstream[In, Out] =
     Link[In, Out]
 
+  /**
+   * An arrow that maps between two categories `From` and `To`.
+   *
+   * This is an alias for `->`.
+   */
+  type Converter[From[_], To[_]] = From -> To
+
+  implicit val EmptyUnit: Unit = ()
+
   type ChainableLink =
     Chained[_, _]
+
+  type ChainableOps =
+    RunnerOps[_ >: Any <: Any, Into forSome { type Into[_] }]
+
+  type ChainableRunner =
+    RunnerData[_, _, _, From forSome { type From[_] }, Into forSome { type Into[_] }]
+
+  type ExistentialLink =
+    Link[_ >: Any <: Any, _ >: Any <: Any]
+
+    //Runner[_, _, _, _, _, Into forSome { type Into[_] }]
 
   type ChainLink = immutable.Vector[ChainableLink]
   val EmptyChainLink = immutable.Vector[ChainableLink]()
 
-  type ChainableOps = RunnerOps[_, Into forSome { type Into[_] }]
+  def newChainLink(chainLink: ChainableLink*): ChainLink =
+    if ((chainLink ne null) && chainLink.nonEmpty)
+      immutable.Vector[ChainableLink](chainLink:_*)
+    else
+      EmptyChainLink
+
+  type ChainRunner     = immutable.Vector[ChainableRunner]
+  val EmptyChainRunner = immutable.Vector[ChainableRunner]()
+
+  def newChainRunner(runners: ChainableRunner*): ChainRunner =
+    if ((runners ne null) && runners.nonEmpty)
+      immutable.Vector[ChainableRunner](runners:_*)
+    else
+      EmptyChainRunner
+
   type ChainOps     = immutable.Vector[ChainableOps]
   val EmptyChainOps = immutable.Vector[ChainableOps]()
 
@@ -71,6 +106,16 @@ package object fluxmuster5 {
 
   implicit object FutureConverter extends (Future -> Future) {
     implicit def apply[A](f: Future[A]): Future[A] = f
+  }
+
+  implicit object TryFutureConverter extends (Try -> Future) {
+    import scala.util.{Success, Failure}
+    implicit def apply[A](t: Try[A]): Future[A] = t match {
+      case Success(a) =>
+        Future.successful(a)
+      case Failure(t) =>
+        Future.failed(t)
+    }
   }
 
   implicit class LinkEnhancements[In, Out](val link: Link[In, Out]) extends AnyVal {

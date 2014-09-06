@@ -154,6 +154,7 @@ object TypeTagTree {
    * Provides an extractor for getting the [[scala.reflect.runtime.universe.TypeSymbol]],
    * the [[scala.reflect.runtime.universe.Type]], the type arguments, and the [[TypeTagTreeSource]]
    * for a [[TypeTagTree]].
+   *
    * @param ttt The [[TypeTagTree]] instance that will be extracted
    * @tparam T The [[scala.reflect.runtime.universe.Type]] for the [[TypeTagTree]]
    * @return An extracted view of the provided [[TypeTagTree]] instance
@@ -162,6 +163,29 @@ object TypeTagTree {
     PartialFunction.condOpt(ttt) {
       case t => (t.symbol, t.tpe, t.typeArguments, t.source)
     }
+
+  /**
+   * Takes an existing higher-kinded [[TypeTagTree]] as a template and produces a new instance
+   * with its type parameters replaced by the provided `typeParameters`.
+   *
+   * @param typeConstructorTemplate Higher-kinded [[TypeTagTree]] candidate that will have its
+   *                                type parameters replaced
+   * @param typeParameters Variable-length list of type parameters that will be used to replace
+   *                       the template's type parameters
+   * @tparam T Type of the template which will remain unchanged except for its type parameters
+   * @return A new [[TypeTagTree]] with new type parameters
+   */
+  def alterTypeParameters[T](typeConstructorTemplate: TypeTagTree[T], typeParameters: TypeTagTree[_]*): TypeTagTree[T] =
+    TypeTagTreeNode(
+      typeConstructorTemplate.source,
+      alterTypeParameters(typeConstructorTemplate.tpe, typeParameters.map(_.tpe):_*)
+    )
+
+  def alterTypeParameters(typeConstructorTemplate: Type, typeParameters: Type*): Type = {
+    val asTypeRefApi = typeConstructorTemplate.asInstanceOf[TypeRefApi]
+    val newType = scala.reflect.runtime.universe.internal.typeRef(asTypeRefApi.pre, asTypeRefApi.sym, typeParameters.toList)
+    newType
+  }
 
   private object Macros {
     import scala.reflect.macros._

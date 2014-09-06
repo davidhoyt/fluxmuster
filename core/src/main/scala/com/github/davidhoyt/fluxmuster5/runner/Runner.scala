@@ -5,32 +5,32 @@ import com.github.davidhoyt.fluxmuster5._
 
 import scala.language.higherKinds
 
-case class Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, Into[_]](
+case class Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, From[_], Into[_]](
   name: String,
   chain: ChainLink,
   link: Link[DownstreamIn, Into[UpstreamOut]],
   originalProxy: Proxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut],
-  opsChain: ChainOps,
+  providedRunnerChain: ChainRunner,
   state: State,
   ops: RunnerOps[State, Into],
+  converter: From -> Into,
   rewireOnFlatMap: Boolean = false,
   asShortString: String = null
 )(
-  implicit val typeState: TypeTagTree[State]
-  )
-  extends Chained[DownstreamIn, UpstreamOut]
-  with Named
+  implicit val typeState: TypeTagTree[State],
+  val typeFrom: TypeTagTree[From[UpstreamOut]]
+)
+  extends Named
 {
-
-  import com.github.davidhoyt.fluxmuster.TypeTagTree
-  import com.github.davidhoyt.fluxmuster5._
-  import scala.collection.immutable
 
   val typeIn =
     originalProxy.downstream.typeIn
 
   val typeOut =
     originalProxy.upstream.typeOut
+
+  val typeInto =
+    link.typeOut
 
   val runner =
     originalProxy.runner
@@ -41,26 +41,28 @@ case class Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, I
   def run(in: DownstreamIn): Into[UpstreamOut] =
     link.run(in)
 
+  def asRunner: Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, From, Into] =
+    this.asInstanceOf[Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, From, Into]]
+
   implicit lazy val toLink: Link[DownstreamIn, Into[UpstreamOut]] =
     link
 
   implicit lazy val toProxy: Proxy[DownstreamIn, DownstreamIn, Into[UpstreamOut], Into[UpstreamOut]] =
     Proxy(name, Link.identity[DownstreamIn](link.typeIn), Link.identity[Into[UpstreamOut]](link.typeOut), run)(link.typeIn, link.typeOut)
 
-  def runInThisContext[OtherIn, OtherOut, OtherFrom[_]](chained: Chained[OtherIn, OtherFrom[OtherOut]], otherRunner: OtherIn => OtherFrom[OtherOut], providedState: State)(implicit converter: OtherFrom -> Into, typeIn: TypeTagTree[OtherIn], typeFromOut: TypeTagTree[OtherFrom[OtherOut]], typeIntoOut: TypeTagTree[Into[OtherOut]]): Link[OtherIn, Into[OtherOut]] = {
-    val chain = chained.chain
-    Link((in: OtherIn) => {
-      val runOtherInThisContext: OtherIn => Into[OtherFrom[OtherOut]] = ops.liftRunner(chain, otherRunner)(providedState, typeIn, typeFromOut)
-      val resultAfterRunning: Into[OtherFrom[OtherOut]] = runOtherInThisContext(in)
-
-      //flatMap!
-      val mapResultBackIntoThisContext = ops.map(resultAfterRunning)(converter.apply)(providedState)
-      val flattenedBackIntoThisContext: Into[OtherOut] = ops.flatten(mapResultBackIntoThisContext)(providedState)
-      flattenedBackIntoThisContext
-    })
+  lazy val runnerChain: ChainRunner = {
+    val data = RunnerData(name, runner, state, ops)(converter, typeIn, typeOut, link.typeOut, typeFrom, typeState).asChainableRunner
+    if ((providedRunnerChain eq null) || providedRunnerChain.isEmpty)
+      newChainRunner(data)
+    else
+      providedRunnerChain :+ data
   }
 
-  def combineInReverse[A, B, C, D](proxy: Proxy[A, B, C, D])(implicit a: B => DownstreamIn, b: B => DownstreamOut, c: UpstreamIn => C, d: UpstreamOut => C, typeIntoOfD: TypeTagTree[Into[D]]): Runner[A, DownstreamOut, UpstreamIn, D, State, Into] = {
+  private[fluxmuster5] def combineInReverse[A, B, C, D](proxy: Proxy[A, B, C, D])(implicit a: B => DownstreamIn, b: B => DownstreamOut, c: UpstreamIn => C, d: UpstreamOut => C, typeFromOfD: TypeTagTree[From[D]], typeIntoOfD: TypeTagTree[Into[D]]): Runner[A, DownstreamOut, UpstreamIn, D, State, From, Into] = {
+    import scala.language.existentials
+
+    implicit val convert = converter
+
     def replaceWith = {
       val mappedProxy =
         proxy.map {
@@ -69,7 +71,7 @@ case class Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, I
         }
         .withProof(originalProxy.proofDownstreamCanMapToUpstream.toFunction)
 
-      Runner.withUnliftedProxy(name, mappedProxy, /*EmptyChainRunner[Into],*/ opsChain, state, ops, rewireOnFlatMap = false)
+      Runner.withUnliftedProxy(name, mappedProxy, providedRunnerChain, state, ops, rewireOnFlatMap = false)
     }
 
     def combineWithHead = {
@@ -78,19 +80,46 @@ case class Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, I
       val newMappedProxy: Proxy[A, DownstreamOut, UpstreamIn, D] =
         proxy combine originalProxy
 
-      val fnNewMappedLink: A => D =
-        newMappedProxy.toFunction
+      val newMappedLink: Link[A, D] =
+        newMappedProxy.toLink
 
-      val newRunLink: Link[A, Into[D]] =
-        Link(ops.liftRunner(newMappedProxy.chain, newMappedProxy.runner)(state, newMappedProxy.downstream.typeIn, newMappedProxy.upstream.typeOut))(proxy.downstream.typeIn, typeIntoOfD)
+      //Re-lift
 
-      //Shouldn't be lifted already!!
-      //It should run in the lifted context of the runner
-      //should be Long => Int, *not* Long => Try[Int]
-      val liftedChainLink: ChainLink = newMappedProxy.chain
-      //val liftedRunChain: ChainRunner[Into] = runChain //No change to list of Runner (lift) instances
+      //There will always be at least one item in the runnerChain (this instance).
+      val initial = {
+        val rd = runnerChain.head
+        val l = newMappedLink.asInstanceOf[ExistentialLink]
+        val alteredTypeInto = TypeTagTree.alterTypeParameters(rd.typeInto, l.typeOut)
+        val lifted = rd.ops.liftRunner(chain, l.toFunction)(rd.ops.unsafeCastAsState(rd.state), l.typeIn, l.typeOut).toLink(rd.name)(l.typeIn, alteredTypeInto)
+        val liftedChain = newChainLink(lifted)
+        (liftedChain, lifted)
+      }
 
-      Runner.withLink(name, liftedChainLink, newRunLink, newMappedProxy, opsChain, state, ops, rewireOnFlatMap = false)
+      val relifted =
+        runnerChain.tail.foldLeft(initial) {
+          case ((chainLink: ChainLink, link), rd) =>
+            //It's necessary to change the type parameters because these TypeTagTrees were captured
+            //with the proxy/link provided before it was possibly combined with other proxies.
+            //As a result, the type parameters can (and are often wrong). The type constructor is
+            //always correct, but we swap out for the correct type parameter which is always the
+            //final proxy's result type since runners simply decorate each other (they're
+            //recursive).
+            val alteredTypeFrom = TypeTagTree.alterTypeParameters(rd.typeFrom, newMappedLink.typeOut)
+            val alteredTypeInto = TypeTagTree.alterTypeParameters(rd.typeInto, newMappedLink.typeOut)
+
+            val liftPreviousIntoCurrent = rd.ops.runInThisContext(chainLink, link.toFunction, rd.state)(rd.converter, link.typeIn, alteredTypeFrom, alteredTypeInto) //(rd.typeState, w.typeIn, w.typeOut) // rd.runInThisContext(chainLink, l).asInstanceOf[ExistentialLink]
+            val chainNext = newChainLink(liftPreviousIntoCurrent)
+
+            (chainNext, liftPreviousIntoCurrent)
+        }
+
+      //Re-cast the newly relifted link back into its expected category.
+      val (newChain, newLink) = {
+        val (reliftedChainLink, reliftedLink) = relifted
+        (reliftedChainLink, reliftedLink.asInstanceOf[Link[A, Into[D]]])
+      }
+
+      Runner.withLink(name, newChain, newLink, newMappedProxy, runnerChain, state, ops, rewireOnFlatMap = false)
     }
 
     if (rewireOnFlatMap)
@@ -99,21 +128,15 @@ case class Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, I
       combineWithHead
   }
 
-  def map[A, B, C, D, S, F[_]](fn: Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, Into] => Runner[A, B, C, D, S, F]): Runner[A, B, C, D, S, F] = {
-    val r = fn(this)
-    println(s"Runner.map: $r")
-    r
-  }
+  def map[A, B, C, D, S, F[_], G[_]](fn: Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, From, Into] => Runner[A, B, C, D, S, F, G]): Runner[A, B, C, D, S, F, G] =
+    fn(this)
 
-  def flatMap[A, B, C, D, S, F[_]](fn: Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, Into] => Runner[A, B, C, D, S, F]): Runner[A, B, C, D, S, F] = {
-    val r = fn(this)
-    println(s"Runner.flatMap: $r")
-    r
-  }
+  def flatMap[A, B, C, D, S, F[_], G[_]](fn: Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, From, Into] => Runner[A, B, C, D, S, F, G]): Runner[A, B, C, D, S, F, G] =
+    fn(this)
 
   lazy val asDefaultString = {
     val in = typeIn.toShortString
-    val out = typeOut.toShortString
+    val out = typeInto.toShortString
 
     s"$name[$in, $out]"
   }
@@ -140,39 +163,25 @@ object Runner {
     liftedRunner
   }
 
-//  private[fluxmuster5] def runInThisContext[In, Out, From[_], State, Into[_]](chain: ChainLink, otherRunner: In => From[Out], providedState: State, ops: RunnerOps[State, Into])(implicit converter: From -> Into, typeIn: TypeTagTree[In], typeFromOut: TypeTagTree[From[Out]], typeIntoOut: TypeTagTree[Into[Out]]): Link[In, Into[Out]] = {
-//    Link((in: In) => {
-//      //Why is this never called???
-//      println("######################## BOO")
-//      val runOtherInThisContext: In => Into[From[Out]] = ops.liftRunner(chain, otherRunner)(providedState, typeIn, typeFromOut)
-//      val resultAfterRunning: Into[From[Out]] = runOtherInThisContext(in)
-//
-//      //flatMap!
-//      val mapResultBackIntoThisContext = ops.map(resultAfterRunning)(converter.apply)(providedState)
-//      val flattenedBackIntoThisContext: Into[Out] = ops.flatten(mapResultBackIntoThisContext)(providedState)
-//      flattenedBackIntoThisContext
-//    })
-//  }
+  def withLink[A, B, C, D, S, F[_], G[_]](name: String, chain: ChainLink, link: Link[A, G[D]], originalProxy: Proxy[A, B, C, D], runnerChain: ChainRunner, state: S, ops: RunnerOps[S, G], rewireOnFlatMap: Boolean = false)(implicit converter: F -> G, typeState: TypeTagTree[S], typeFofD: TypeTagTree[F[D]]): Runner[A, B, C, D, S, F, G] =
+    Runner[A, B, C, D, S, F, G](name, chain, link, originalProxy, runnerChain, state, ops, converter, rewireOnFlatMap)(typeState, typeFofD)
 
-  def withLink[A, B, C, D, S, F[_]](name: String, chain: ChainLink, link: Link[A, F[D]], originalProxy: Proxy[A, B, C, D], opsChain: ChainOps, state: S, ops: RunnerOps[S, F], rewireOnFlatMap: Boolean = false)(implicit typeState: TypeTagTree[S]): Runner[A, B, C, D, S, F] =
-    Runner[A, B, C, D, S, F](name, chain, link, originalProxy, opsChain, state, ops, rewireOnFlatMap)(typeState)
-
-  def withUnliftedProxy[A, B, C, D, S, F[_]](name: String, proxy: Proxy[A, B, C, D], opsChain: ChainOps, state: S, ops: RunnerOps[S, F], rewireOnFlatMap: Boolean = false)(implicit typeState: TypeTagTree[S], typeFOfD: TypeTagTree[F[D]]): Runner[A, B, C, D, S, F] = {
+  def withUnliftedProxy[A, B, C, D, S, F[_], G[_]](name: String, proxy: Proxy[A, B, C, D], runnerChain: ChainRunner, state: S, ops: RunnerOps[S, G], rewireOnFlatMap: Boolean = false)(implicit converter: F -> G, typeState: TypeTagTree[S], typeFOfD: TypeTagTree[F[D]], typeGOfD: TypeTagTree[G[D]]): Runner[A, B, C, D, S, F, G] = {
     val proxyLink = proxy.toLink
     val liftedRunner = liftChained(proxyLink, state, ops)
     val liftedChain = immutable.Vector(proxy.downstream, proxy.proofDownstreamCanMapToUpstream, proxy.upstream)
-    val lifted = withLink[A, B, C, D, S, F](name, liftedChain, liftedRunner, proxy, opsChain, state, ops, rewireOnFlatMap)
+    val lifted = withLink[A, B, C, D, S, F, G](name, liftedChain, liftedRunner, proxy, runnerChain, state, ops, rewireOnFlatMap)
     lifted
   }
 
-  def withRunner[A, B, C, D, S, F[_], State, Into[_]](name: String, runner: Runner[A, B, C, D, S, F], state: State, ops: RunnerOps[State, Into], rewireOnFlatMap: Boolean = false)(implicit converter:  F -> Into, typeState: TypeTagTree[State], typeIntoOfD: TypeTagTree[Into[D]]): Runner[A, B, C, D, State, Into] = {
-//    val proxy = runner.originalProxy
-//    val link: Link[A, F[D]] = runner.toLink
-//    val chain: ChainLink = link.chain
-//    val run = link.runner
-//    val bar: Link[A, Into[D]] = runInThisContext(chain, run, state, ops)(converter, link.typeIn, link.typeOut, typeIntoOfD)
-//    val liftedRunner: Runner[A, B, C, D, State, Into] = Runner(name, bar.chain, bar, proxy, ops.asChainableOps +: runner.opsChain, state, ops, rewireOnFlatMap)
-//    liftedRunner
-    ???
+  def withRunner[A, B, C, D, S, F[_], G[_], State, Into[_]](name: String, runner: Runner[A, B, C, D, S, F, G], state: State, ops: RunnerOps[State, Into], rewireOnFlatMap: Boolean = false)(implicit converter:  G -> Into, typeState: TypeTagTree[State], typeGOfD: TypeTagTree[G[D]], typeIntoOfD: TypeTagTree[Into[D]]): Runner[A, B, C, D, State, G, Into] = {
+    val link = ops.runInThisContext(runner.chain, runner.run _, state)(converter, runner.link.typeIn, runner.link.typeOut, typeIntoOfD)
+    val r = Runner(name, runner.chain, link, runner.originalProxy, runner.runnerChain, state, ops, converter, rewireOnFlatMap = true)
+    r
   }
+}
+
+case class RunnerData[In, Out, State, From[_], Into[_]](name: String, runner: In => Out, state: State, ops: RunnerOps[State, Into])(implicit val converter: From -> Into, val typeIn: TypeTagTree[In], val typeOut: TypeTagTree[Out], val typeInto: TypeTagTree[Into[Out]], val typeFrom: TypeTagTree[From[Out]], val typeState: TypeTagTree[State]) {
+  def asChainableRunner: ChainableRunner =
+    this.asInstanceOf[ChainableRunner]
 }
