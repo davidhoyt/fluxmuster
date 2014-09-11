@@ -51,7 +51,7 @@ case class Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, F
     Proxy(name, Link.identity[DownstreamIn](link.typeIn), Link.identity[Into[UpstreamOut]](link.typeOut), run)(link.typeIn, link.typeOut)
 
   lazy val runnerChain: ChainRunner = {
-    val data = RunnerData(name, runner, state, ops)(converter, typeIn, typeOut, link.typeOut, typeFrom, typeState).asChainableRunner
+    val data = RunnerData(name, runner, state, ops)(converter, typeIn, typeOut, typeFrom, link.typeOut, typeState).asChainableRunner
     if ((providedRunnerChain eq null) || providedRunnerChain.isEmpty)
       newChainRunner(data)
     else
@@ -71,7 +71,7 @@ case class Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, F
         }
         .withProof(originalProxy.proofDownstreamCanMapToUpstream.toFunction)
 
-      Runner.withUnliftedProxy(name, mappedProxy, providedRunnerChain, state, ops, rewireOnFlatMap = false)
+      Runner.withUnliftedProxy(name, mappedProxy, providedRunnerChain, state, ops, rewireOnFlatMap = false)(converter, typeState, typeFromOfD, typeIntoOfD)
     }
 
     def combineWithHead = {
@@ -85,19 +85,22 @@ case class Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, F
 
       //Re-lift
 
+      println("------")
+
       //There will always be at least one item in the runnerChain (this instance).
       val initial = {
         val rd = runnerChain.head
         val l = newMappedLink.asInstanceOf[ExistentialLink]
         val alteredTypeInto = TypeTagTree.alterTypeParameters(rd.typeInto, l.typeOut)
         val lifted = rd.ops.liftRunner(chain, l.toFunction)(rd.ops.unsafeCastAsState(rd.state), l.typeIn, l.typeOut).toLink(rd.name)(l.typeIn, alteredTypeInto)
+        //val lifted2 = rd.ops.runInThisContext(chain, lifted.toFunction, rd.ops.unsafeCastAsState(rd.state))(rd.converter, lifted.typeIn, rd.typeFrom, rd.typeInto)
         val liftedChain = newChainLink(lifted)
-        (liftedChain, lifted)
+        (liftedChain, rd.converter, lifted)
       }
 
       val relifted =
-        runnerChain.tail.foldLeft(initial) {
-          case ((chainLink: ChainLink, link), rd) =>
+        runnerChain.tail.dropRight(1).foldLeft(initial) {
+          case ((chainLink: ChainLink, converts, link), rd) =>
             //It's necessary to change the type parameters because these TypeTagTrees were captured
             //with the proxy/link provided before it was possibly combined with other proxies.
             //As a result, the type parameters can (and are often wrong). The type constructor is
@@ -107,19 +110,22 @@ case class Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, F
             val alteredTypeFrom = TypeTagTree.alterTypeParameters(rd.typeFrom, newMappedLink.typeOut)
             val alteredTypeInto = TypeTagTree.alterTypeParameters(rd.typeInto, newMappedLink.typeOut)
 
+            println(s"${rd.name} ${alteredTypeFrom.tpe} ${alteredTypeInto.tpe}")
+
             val liftPreviousIntoCurrent = rd.ops.runInThisContext(chainLink, link.toFunction, rd.state)(rd.converter, link.typeIn, alteredTypeFrom, alteredTypeInto) //(rd.typeState, w.typeIn, w.typeOut) // rd.runInThisContext(chainLink, l).asInstanceOf[ExistentialLink]
             val chainNext = newChainLink(liftPreviousIntoCurrent)
 
-            (chainNext, liftPreviousIntoCurrent)
+            (chainNext, rd.converter, liftPreviousIntoCurrent)
         }
+      println(">>>>>>>>")
 
       //Re-cast the newly relifted link back into its expected category.
       val (newChain, newLink) = {
-        val (reliftedChainLink, reliftedLink) = relifted
+        val (reliftedChainLink, _, reliftedLink) = relifted
         (reliftedChainLink, reliftedLink.asInstanceOf[Link[A, Into[D]]])
       }
 
-      Runner.withLink(name, newChain, newLink, newMappedProxy, runnerChain, state, ops, rewireOnFlatMap = false)
+      Runner.withLink(name, newChain, newLink, newMappedProxy, runnerChain, state, ops, rewireOnFlatMap = false) //(convertInto, typeState, typeIntoOfD)
     }
 
     if (rewireOnFlatMap)
@@ -181,7 +187,7 @@ object Runner {
   }
 }
 
-case class RunnerData[In, Out, State, From[_], Into[_]](name: String, runner: In => Out, state: State, ops: RunnerOps[State, Into])(implicit val converter: From -> Into, val typeIn: TypeTagTree[In], val typeOut: TypeTagTree[Out], val typeInto: TypeTagTree[Into[Out]], val typeFrom: TypeTagTree[From[Out]], val typeState: TypeTagTree[State]) {
+case class RunnerData[In, Out, State, From[_], Into[_]](name: String, runner: In => Out, state: State, ops: RunnerOps[State, Into])(implicit val converter: From -> Into, val typeIn: TypeTagTree[In], val typeOut: TypeTagTree[Out], val typeFrom: TypeTagTree[From[Out]], val typeInto: TypeTagTree[Into[Out]], val typeState: TypeTagTree[State]) {
   def asChainableRunner: ChainableRunner =
     this.asInstanceOf[ChainableRunner]
 }

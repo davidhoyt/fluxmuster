@@ -43,22 +43,28 @@ class RunnerSpec extends UnitSpec {
     val bar =
       Proxy("p1", link2 ~> link3, link4 ~> link5) flatMap { a =>
         Proxy("p2", link3, link4) flatMap { b =>
-          Serial("s1", b) flatMap { c =>
-            Serial("s2", c) flatMap { d =>
-              Async("a3", d) flatMap { e =>
-                Async("a4", e) map { f =>
-                  f
+          Proxy("p3", link6, link4) flatMap { c =>
+            Serial("s1", c) flatMap { d =>
+              Serial("s2", d) flatMap { e =>
+                Async("a3", e) map { f =>
+                  Async("a4", c) map { g =>
+//                    println(f.runnerChain.map(_.name))
+                    g
+                  }
+//                  f
                 }
               }
+//              d
             }
           }
         }
       }
     println(bar.asDefaultString)
     val b = bar.run("0")
+    println(b)
     println(Await.result(b, 10.seconds))
     println("$$$$$$$$$$$$$$$")
-    //System.exit(0)
+    System.exit(0)
 
     val foo =
       for {

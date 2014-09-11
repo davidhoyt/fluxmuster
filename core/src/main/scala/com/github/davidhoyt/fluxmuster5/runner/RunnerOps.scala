@@ -21,10 +21,25 @@ trait RunnerOps[State, Into[_]] {
       val runOtherInThisContext: A => Into[From[D]] = liftRunner(chain, otherRunner)(state, typeIn, typeFromOut)
       val resultAfterRunning: Into[From[D]] = runOtherInThisContext(in)
 
-      val mapResultBackIntoThisContext = map(resultAfterRunning)(converter.apply)(state)
-      val flattenedBackIntoThisContext: Into[D] = flatten(mapResultBackIntoThisContext)(state)
+      println(s">> runInThisContext, in: $in, resultAfterRunning: $resultAfterRunning")
 
-      flattenedBackIntoThisContext
+      try {
+        val mapResultBackIntoThisContext: Into[Into[D]] = map(resultAfterRunning) { from: From[D] =>
+          println(s">> converting $from")
+          val converted: Into[D] = converter.apply(from)
+          println(s">> converted $converted")
+          //could it be an issue of the map and flatten running async in parallel?
+          //no
+          converted
+        }(state)
+        val flattenedBackIntoThisContext: Into[D] = flatten(mapResultBackIntoThisContext)(state)
+
+        flattenedBackIntoThisContext
+      } catch {
+        case t: Throwable =>
+          t.printStackTrace()
+          ???
+      }
     })
   }
 

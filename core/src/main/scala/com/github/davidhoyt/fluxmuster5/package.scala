@@ -101,20 +101,29 @@ package object fluxmuster5 {
   }
 
   implicit object TryConverter extends (Try -> Try) {
-    implicit def apply[A](t: Try[A]): Try[A] = t
+    implicit def apply[A](t: Try[A]): Try[A] = {
+      println(s"Try -> Try")
+      t
+    }
   }
 
   implicit object FutureConverter extends (Future -> Future) {
-    implicit def apply[A](f: Future[A]): Future[A] = f
+    implicit def apply[A](f: Future[A]): Future[A] = {
+      println(s"Future -> Future")
+      f
+    }
   }
 
   implicit object TryFutureConverter extends (Try -> Future) {
     import scala.util.{Success, Failure}
-    implicit def apply[A](t: Try[A]): Future[A] = t match {
-      case Success(a) =>
-        Future.successful(a)
-      case Failure(t) =>
-        Future.failed(t)
+    implicit def apply[A](t: Try[A]): Future[A] = {
+      println(s"Try -> Future")
+      t match {
+        case Success(a) =>
+          Future.successful(a)
+        case Failure(t) =>
+          Future.failed(t)
+      }
     }
   }
 
@@ -189,10 +198,17 @@ package object fluxmuster5 {
           Future.failed(error)
       }
 
-    def map[A, B](given: Future[A])(fn: A => B)(implicit ec: ExecutionContext): Future[B] =
-      given.map(fn)(ec)
+    def map[A, B](given: Future[A])(fn: A => B)(implicit ec: ExecutionContext): Future[B] = {
+      Thread.sleep(1000L)
+      println(s"FutureOps.map: $given")
+      val r = given.map(fn)(ec)
+      println(s"FutureOps.map.result: $r")
+      r
+    }
 
     def flatten[A](given: Future[Future[A]])(implicit ec: ExecutionContext): Future[A] = {
+      Thread.sleep(1000L)
+      println(s"FutureOps.flatten: $given")
       import scala.util._
       val p = Promise[A]()
       given.onComplete {
@@ -201,7 +217,9 @@ package object fluxmuster5 {
         case Failure(t) =>
           p.failure(t)
       }
-      p.future
+      val r = p.future
+      println(s"FutureOps.flatten.result: $r")
+      r
     }
   }
 }
