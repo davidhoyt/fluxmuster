@@ -1,4 +1,4 @@
-package com.github.davidhoyt.fluxmuster
+package com.github.davidhoyt.fluxmusterOrig
 
 import net.sf.ehcache.{Ehcache => ActualEhcache, Element, CacheManager}
 

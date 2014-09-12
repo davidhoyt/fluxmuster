@@ -9,7 +9,7 @@ import akka.util.Timeout
 
 import scala.collection._
 import scala.util._
-import com.github.davidhoyt.fluxmuster._
+import com.github.davidhoyt.fluxmusterOrig._
 import Hystrix._
 
 //PROBLEM WITH THIS SOLUTION

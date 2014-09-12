@@ -1,8 +1,9 @@
-package com.github.davidhoyt.fluxmuster
+package com.github.davidhoyt.fluxmusterOrig
 
 import akka.actor.ActorRefFactory
 import akka.util.Timeout
 import com.netflix.hystrix.HystrixCommand
+import com.github.davidhoyt.fluxmuster.{Macros, TypeTagTree}
 import scala.concurrent.duration._
 
 case class HystrixConfiguration(group: String = "default", command: String = "default", timeout: Duration = 1.second, builder: HystrixCommand.Setter => HystrixCommand.Setter = identity)

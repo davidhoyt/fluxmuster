@@ -1,8 +1,9 @@
 package com.github.davidhoyt
 
+import com.github.davidhoyt.fluxmuster.{Macros, TypeTagTree}
 import scala.collection._
 
-package object fluxmuster {
+package object fluxmusterOrig {
   //type Meta = Metadata
   type Error = Throwable
 

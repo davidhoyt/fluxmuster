@@ -1,4 +1,6 @@
-package com.github.davidhoyt.fluxmuster
+package com.github.davidhoyt.fluxmusterOrig
+
+import com.github.davidhoyt.fluxmuster.{Macros, TypeTagTree}
 
 object Upstream {
   val NAME = Macros.simpleNameOf[Upstream.type]

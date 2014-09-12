@@ -1,7 +1,8 @@
-package com.github.davidhoyt.fluxmuster
+package com.github.davidhoyt.fluxmusterOrig
 
 import akka.actor._
 import akka.util.Timeout
+import com.github.davidhoyt.fluxmuster.{Macros, TypeTagTree}
 
 case class AkkaConfiguration(name: String = Macros.nameOf[Akka.ProxyActor.type])
 
