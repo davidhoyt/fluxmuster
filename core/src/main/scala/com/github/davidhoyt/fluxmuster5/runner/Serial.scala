@@ -11,13 +11,18 @@ object Serial extends RunnerFactory[Unit, Try] {
 
   protected val ops =
     new RunnerOps[Unit, Try] {
+      import com.typesafe.scalalogging.Logger
+      import org.slf4j.LoggerFactory
+
+      private val logger = Logger(LoggerFactory.getLogger(Macros.nameOf[Serial.type] + ".ops"))
+
       def liftRunner[A, D](chained: ChainLink, runner: A => D)(implicit state: Unit, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Try[D] =
         (a: A) => Try(runner(a))
 
       def flatten[A](given: Try[Try[A]])(implicit state: Unit): Try[A] = {
-        println(s"SerialOps.flatten: $given")
+        logger.debug(s"Flattening with: $given")
         val r = given.flatten
-        println(s"SerialOps.flatten.result: $r")
+        logger.debug(s"Result of flattening: $r")
         r
       }
 
@@ -25,9 +30,9 @@ object Serial extends RunnerFactory[Unit, Try] {
         Try(given)
 
       def map[A, B](given: Try[A])(fn: A => B)(implicit state: Unit): Try[B] = {
-        println(s"SerialOps.map: $given")
+        logger.debug(s"Mapping with: $given")
         val r = given map fn
-        println(s"SerialOps.map.result: $r")
+        logger.debug(s"Result of mapping: $r")
         r
       }
     }

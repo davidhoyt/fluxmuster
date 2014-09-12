@@ -1,12 +1,16 @@
 package com.github.davidhoyt.fluxmuster5.runner
 
-import com.github.davidhoyt.fluxmuster.TypeTagTree
+import com.github.davidhoyt.fluxmuster.{Macros, TypeTagTree}
 import com.github.davidhoyt.fluxmuster5._
 
 import scala.language.higherKinds
 
 trait RunnerOps[State, Into[_]] {
   import scala.language.implicitConversions
+  import com.typesafe.scalalogging.Logger
+  import org.slf4j.LoggerFactory
+
+  private val logger = Logger(LoggerFactory.getLogger(getClass))
 
   def liftRunner[A, D](chained: ChainLink, runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Into[D]
   def point[A](given: => A)(implicit state: State): Into[A]
@@ -21,25 +25,19 @@ trait RunnerOps[State, Into[_]] {
       val runOtherInThisContext: A => Into[From[D]] = liftRunner(chain, otherRunner)(state, typeIn, typeFromOut)
       val resultAfterRunning: Into[From[D]] = runOtherInThisContext(in)
 
-      println(s">> runInThisContext, in: $in, resultAfterRunning: $resultAfterRunning")
+      logger.debug(s"RunnerOps.runInThisContext result after running: $resultAfterRunning")
 
-      try {
-        val mapResultBackIntoThisContext: Into[Into[D]] = map(resultAfterRunning) { from: From[D] =>
-          println(s">> converting $from")
-          val converted: Into[D] = converter.apply(from)
-          println(s">> converted $converted")
-          //could it be an issue of the map and flatten running async in parallel?
-          //no
-          converted
-        }(state)
-        val flattenedBackIntoThisContext: Into[D] = flatten(mapResultBackIntoThisContext)(state)
+      val mapResultBackIntoThisContext: Into[Into[D]] = map(resultAfterRunning) { from: From[D] =>
+        logger.debug(s"RunnerOps.runInThisContext converting $from [${typeFromOut.toShortString}]")
+        val converted: Into[D] = converter.apply(from)
+        logger.debug(s"RunnerOps.runInThisContext converted to $converted [${typeIntoOut.toShortString}]")
+        //could it be an issue of the map and flatten running async in parallel?
+        //no
+        converted
+      }(state)
+      val flattenedBackIntoThisContext: Into[D] = flatten(mapResultBackIntoThisContext)(state)
 
-        flattenedBackIntoThisContext
-      } catch {
-        case t: Throwable =>
-          t.printStackTrace()
-          ???
-      }
+      flattenedBackIntoThisContext
     })
   }
 

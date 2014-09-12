@@ -44,14 +44,14 @@ class RunnerSpec extends UnitSpec {
       Proxy("p1", link2 ~> link3, link4 ~> link5) flatMap { a =>
         Proxy("p2", link3, link4) flatMap { b =>
           Proxy("p3", link6, link4) flatMap { c =>
-            Serial("s1", c) flatMap { d =>
+            Serial("s1", b) flatMap { d =>
               Serial("s2", d) flatMap { e =>
                 Async("a3", e) map { f =>
-                  Async("a4", c) map { g =>
+//                  Async("a4", c) map { g =>
 //                    println(f.runnerChain.map(_.name))
-                    g
-                  }
-//                  f
+//                    g
+//                  }
+                  f
                 }
               }
 //              d
@@ -59,12 +59,8 @@ class RunnerSpec extends UnitSpec {
           }
         }
       }
-    println(bar.asDefaultString)
-    val b = bar.run("0")
-    println(b)
-    println(Await.result(b, 10.seconds))
-    println("$$$$$$$$$$$$$$$")
-    System.exit(0)
+    Await.result(bar.run("0"), 10.seconds) should be ("33")
+    //println(bar.asDefaultString)
 
     val foo =
       for {
@@ -76,7 +72,6 @@ class RunnerSpec extends UnitSpec {
         r1 <- Serial("r1", p2) //TODO: FIX! Should not be applying link6!!
         //r2 <- Serial("r2", r1)
       } yield r1
-    println(s"runnerSpec: $foo")
 
     val simpleRunnerMapWithLink =
       for {
@@ -96,8 +91,8 @@ class RunnerSpec extends UnitSpec {
         r2 <- Serial("r2", r1)
       } yield r2
 
-    println(foo.chain.asDefaultString)
+    //println(foo.chain.asDefaultString)
     val r = foo.run("3")
-    r should be (Success("41"))
+    r should be (Success("41")) //TODO: Check that
   }
 }

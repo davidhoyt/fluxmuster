@@ -1,5 +1,6 @@
 package com.github.davidhoyt
 
+import com.github.davidhoyt.fluxmuster.Macros
 import com.github.davidhoyt.fluxmuster5.runner.RunnerOps
 
 package object fluxmuster5 {
@@ -76,24 +77,6 @@ package object fluxmuster5 {
   type FnChainLink =
     (ChainableLink, ChainLink, ChainLink) => ChainLink
 
-  val typeUnit =
-    typeTagTreeOf[Unit]
-
-  val typeAny =
-    typeTagTreeOf[Any]
-
-  val typeFutureOfAny =
-    typeTagTreeOf[Future[Any]]
-
-  val typeFutureOfUnit =
-    typeTagTreeOf[Future[Unit]]
-
-  val typeNothing =
-    typeTagTreeOf[Nothing]
-
-  val typeFutureOfNothing =
-    typeTagTreeOf[Future[Nothing]]
-
   implicit object IdentityConverter {
     def apply[F[_]] = new Converter[F, F] {
       override implicit def apply[A](a: F[A]): F[A] = a
@@ -101,23 +84,39 @@ package object fluxmuster5 {
   }
 
   implicit object TryConverter extends (Try -> Try) {
+    import com.typesafe.scalalogging.Logger
+    import org.slf4j.LoggerFactory
+
+    private val logger = Logger(LoggerFactory.getLogger(Macros.nameOf[TryConverter.type]))
+
     implicit def apply[A](t: Try[A]): Try[A] = {
-      println(s"Try -> Try")
+      logger.debug(s"Applying conversion Try -> Try")
       t
     }
   }
 
   implicit object FutureConverter extends (Future -> Future) {
+    import com.typesafe.scalalogging.Logger
+    import org.slf4j.LoggerFactory
+
+    private val logger = Logger(LoggerFactory.getLogger(Macros.nameOf[FutureConverter.type]))
+
     implicit def apply[A](f: Future[A]): Future[A] = {
-      println(s"Future -> Future")
+      logger.debug(s"Applying conversion Future -> Future")
       f
     }
   }
 
   implicit object TryFutureConverter extends (Try -> Future) {
     import scala.util.{Success, Failure}
+    import com.typesafe.scalalogging.Logger
+    import org.slf4j.LoggerFactory
+
+    private val logger = Logger(LoggerFactory.getLogger(Macros.nameOf[TryFutureConverter.type]))
+
     implicit def apply[A](t: Try[A]): Future[A] = {
-      println(s"Try -> Future")
+      logger.debug(s"Applying conversion Try -> Future")
+
       t match {
         case Success(a) =>
           Future.successful(a)
@@ -182,8 +181,12 @@ package object fluxmuster5 {
     TypeTagTree.typeTagTreeOf[T](ttt)
 
   implicit object FutureRunnerOps extends RunnerOps[ExecutionContext, Future] {
+    import com.typesafe.scalalogging.Logger
+    import org.slf4j.LoggerFactory
     import scala.concurrent.Promise
     import scala.util.control.NonFatal
+
+    private val logger = Logger(LoggerFactory.getLogger(Macros.nameOf[FutureRunnerOps.type]))
 
     def liftRunner[A, D](chain: ChainLink, runner: A => D)(implicit ec: ExecutionContext, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] =
       (a: A) =>
@@ -199,17 +202,15 @@ package object fluxmuster5 {
       }
 
     def map[A, B](given: Future[A])(fn: A => B)(implicit ec: ExecutionContext): Future[B] = {
-      Thread.sleep(1000L)
-      println(s"FutureOps.map: $given")
+      logger.debug(s"Mapping with: $given")
       val r = given.map(fn)(ec)
-      println(s"FutureOps.map.result: $r")
+      logger.debug(s"Result of map: $r")
       r
     }
 
     def flatten[A](given: Future[Future[A]])(implicit ec: ExecutionContext): Future[A] = {
-      Thread.sleep(1000L)
-      println(s"FutureOps.flatten: $given")
       import scala.util._
+      logger.debug(s"Flattening with: $given")
       val p = Promise[A]()
       given.onComplete {
         case Success(next) =>
@@ -218,7 +219,7 @@ package object fluxmuster5 {
           p.failure(t)
       }
       val r = p.future
-      println(s"FutureOps.flatten.result: $r")
+      logger.debug(s"Result of flattening: $r")
       r
     }
   }

@@ -85,8 +85,6 @@ case class Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, F
 
       //Re-lift
 
-      println("------")
-
       //There will always be at least one item in the runnerChain (this instance).
       val initial = {
         val rd = runnerChain.head
@@ -117,7 +115,6 @@ case class Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, F
 
             (chainNext, rd.converter, liftPreviousIntoCurrent)
         }
-      println(">>>>>>>>")
 
       //Re-cast the newly relifted link back into its expected category.
       val (newChain, newLink) = {

@@ -22,7 +22,7 @@ libraryDependencies ++= Seq(
   "com.novaquark" % "metrics-influxdb" % "0.3.0",
   "com.palominolabs.metrics" % "metrics-new-relic" % "1.0.4",
   "com.typesafe" % "config" % "1.2.1",
-  "com.typesafe.scala-logging" %% "scala-logging-slf4j" % "3.1.0",
+  "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
   "com.typesafe.akka" %% "akka-actor" % "2.3.5",
   "com.typesafe.akka" %% "akka-slf4j" % "2.3.5",
   "io.kamon" %% "kamon-core"  % "0.3.3"    excludeAll(ExclusionRule(organization = "io.spray")),
