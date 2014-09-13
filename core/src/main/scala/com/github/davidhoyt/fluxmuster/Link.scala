@@ -1,6 +1,4 @@
-package com.github.davidhoyt.fluxmuster5
-
-import com.github.davidhoyt.fluxmuster.TypeTagTree
+package com.github.davidhoyt.fluxmuster
 
 /**
  * Represents a quasi-polymorphic function that can be composed with other
@@ -137,7 +135,7 @@ sealed trait Link[In, Out] extends Chained[In, Out] { self: Named =>
 object Link {
   import scala.collection.immutable
 
-  private[fluxmuster5] abstract case class Build[In, Out](name: String, mine: ChainLink, otherLink: ChainLink, chaining: FnChainLink, override val asShortString: String = null, sideEffects: ChainSideEffects[Out] = EmptyChainSideEffects[Out])(implicit val typeIn: TypeTagTree[In], val typeOut: TypeTagTree[Out]) extends Link[In, Out] with Named {
+  private[fluxmuster] abstract case class Build[In, Out](name: String, mine: ChainLink, otherLink: ChainLink, chaining: FnChainLink, override val asShortString: String = null, sideEffects: ChainSideEffects[Out] = EmptyChainSideEffects[Out])(implicit val typeIn: TypeTagTree[In], val typeOut: TypeTagTree[Out]) extends Link[In, Out] with Named {
     lazy val chain =
       chainTogether(this, mine, otherLink)
 
@@ -145,7 +143,7 @@ object Link {
       chaining(instance, mine, other)
   }
 
-  private[fluxmuster5] def linkCombined(instance: ChainableLink, mine: ChainLink, other: ChainLink): ChainLink =
+  private[fluxmuster] def linkCombined(instance: ChainableLink, mine: ChainLink, other: ChainLink): ChainLink =
     (mine ++ other).foldLeft(EmptyChainLink) {
       case (seq, p) if p.chain.nonEmpty =>
         seq :+ p.chain.head
@@ -153,7 +151,7 @@ object Link {
         seq
     }
 
-  private[fluxmuster5] def linkProvided(instance: ChainableLink, mine: ChainLink, other: ChainLink): ChainLink =
+  private[fluxmuster] def linkProvided(instance: ChainableLink, mine: ChainLink, other: ChainLink): ChainLink =
     if ((mine eq null) || mine.isEmpty)
       immutable.Vector(instance)
     else

@@ -13,7 +13,7 @@ class RunnerSpec extends UnitSpec {
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
-  behavior of Macros.simpleNameOf[Link.type]
+  behavior of Macros.simpleNameOf[runner.Runner.type]
 
   val link2: Link[String, Long] =
     ((x: String) => {println(s"link2-a: '$x'"); x.toLong}).toLink("link2-a")
