@@ -1,13 +1,12 @@
-package com.github.davidhoyt.fluxmuster.runner
-
-import com.github.davidhoyt.fluxmuster._
+package com.github.davidhoyt.fluxmuster
 
 import scala.language.higherKinds
 
 trait RunnerOps[State, Into[_]] {
-  import scala.language.implicitConversions
   import com.typesafe.scalalogging.Logger
   import org.slf4j.LoggerFactory
+
+import scala.language.implicitConversions
 
   private val logger = Logger(LoggerFactory.getLogger(getClass))
 

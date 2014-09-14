@@ -26,5 +26,12 @@ class ProxySpec extends UnitSpec {
       } yield p4
     foo.run("0") should be ("13")
     //println(foo.chain.asDefaultString)
+
+    val baz =
+      for {
+        fromTuple <- (linkInc1, linkMult2Dec1).toProxy("fromTuple")
+      } yield foo combine fromTuple
+    baz.run("0") should be ("33")
+    println(baz.chain.asDefaultString)
   }
 }

@@ -9,7 +9,7 @@ package com.github.davidhoyt.fluxmuster
  * tracked as a chain of links/functions that represent the combined
  * path to the current link.
  */
-sealed trait Link[In, Out] extends Chained[In, Out] { self: Named =>
+sealed trait Link[In, Out] extends Chained[In, Out] with Run[In, Out] { self: Named =>
   import scala.collection._
 
   implicit val typeIn: TypeTagTree[In]
@@ -21,7 +21,7 @@ sealed trait Link[In, Out] extends Chained[In, Out] { self: Named =>
 
   protected def runLink[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B
 
-  def apply[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B = {
+  override def apply[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B = {
     val out = runLink(a)(aToIn, identity)
     if (sideEffects.nonEmpty)
       sideEffects foreach (_.apply(out))

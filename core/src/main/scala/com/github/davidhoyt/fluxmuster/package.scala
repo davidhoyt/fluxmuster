@@ -1,14 +1,11 @@
 package com.github.davidhoyt
 
-import com.github.davidhoyt.fluxmuster.Macros
-import com.github.davidhoyt.fluxmuster.runner.RunnerOps
-
 package object fluxmuster {
   import scala.collection._
   import scala.concurrent.{ExecutionContext, Future}
   import scala.util.Try
   import com.github.davidhoyt.fluxmuster.TypeTagTree
-//  import runner._
+  import runner._
 
   import scala.language.higherKinds
   import scala.language.existentials
@@ -35,8 +32,8 @@ package object fluxmuster {
   type ChainableOps =
     RunnerOps[_ >: Any <: Any, Into forSome { type Into[_] }]
 
-//  type ChainableRunner =
-//    RunnerData[_, _, _, From forSome { type From[_] }, Into forSome { type Into[_] }]
+  type ChainableRunner =
+    RunnerData[_, _, _, From forSome { type From[_] }, Into forSome { type Into[_] }]
 
   type ExistentialLink =
     Link[_ >: Any <: Any, _ >: Any <: Any]
@@ -50,14 +47,14 @@ package object fluxmuster {
     else
       EmptyChainLink
 
-//  type ChainRunner     = immutable.Vector[ChainableRunner]
-//  val EmptyChainRunner = immutable.Vector[ChainableRunner]()
-//
-//  def newChainRunner(runners: ChainableRunner*): ChainRunner =
-//    if ((runners ne null) && runners.nonEmpty)
-//      immutable.Vector[ChainableRunner](runners:_*)
-//    else
-//      EmptyChainRunner
+  type ChainRunner     = immutable.Vector[ChainableRunner]
+  val EmptyChainRunner = immutable.Vector[ChainableRunner]()
+
+  def newChainRunner(runners: ChainableRunner*): ChainRunner =
+    if ((runners ne null) && runners.nonEmpty)
+      immutable.Vector[ChainableRunner](runners:_*)
+    else
+      EmptyChainRunner
 
   type ChainOps     = immutable.Vector[ChainableOps]
   val EmptyChainOps = immutable.Vector[ChainableOps]()
@@ -155,14 +152,20 @@ package object fluxmuster {
   }
 
   implicit class Tuple2Enhancements[A, B, C, D](val t: ((Downstream[A, B], Upstream[C, D]))) extends AnyVal {
-    implicit def toProxy(implicit proof: B => C): Proxy[A, B, C, D] = {
+    implicit def toProxy(implicit proof: B => C): Proxy[A, B, C, D] =
+      toProxy("<~>")
+
+    implicit def toProxy(name: String)(implicit proof: B => C): Proxy[A, B, C, D] = {
       val (down, up) = t
-      Proxy("<~>", down, up, proof)(down.typeOut, up.typeIn)
+      Proxy(name, down, up, proof)(down.typeOut, up.typeIn)
     }
 
-    implicit def toProxyNeedsProof: ProxyNeedsProof[A, B, C, D] = {
+    implicit def toProxyNeedsProof: ProxyNeedsProof[A, B, C, D] =
+      toProxyNeedsProof("<~>")
+
+    implicit def toProxyNeedsProof(name: String): ProxyNeedsProof[A, B, C, D] = {
       val (down, up) = t
-      Proxy("<~>", down, up)
+      Proxy(name, down, up)
     }
   }
 

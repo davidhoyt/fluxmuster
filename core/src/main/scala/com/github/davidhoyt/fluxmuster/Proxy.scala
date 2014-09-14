@@ -50,7 +50,7 @@ trait ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] exte
 //    }
 //  }
 
-  def flatMap[A, B, C, D, T](fn: this.type => T)(implicit evidence: T <:< ProxyNeedsProof[A, B, C, D]): T =
+  def flatMap[A, B, C, D, T](fn: this.type => T)(implicit evidence: T <:< Run[A, D]): T =
     //Ignore the chain when flatMapping.
     fn(this) //.combineInReverse(withProof)
 
@@ -102,7 +102,8 @@ trait ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] exte
 
 trait Proxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
   extends ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
-  with Chained[DownstreamIn, UpstreamOut] {
+  with Chained[DownstreamIn, UpstreamOut]
+  with Run[DownstreamIn, UpstreamOut] {
 
   implicit val proofDownstreamCanMapToUpstream: Link[DownstreamOut, UpstreamIn]
 
