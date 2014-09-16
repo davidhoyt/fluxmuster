@@ -18,6 +18,9 @@ trait ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] exte
     composed(in)
   }
 
+  def <~>[A, B, C, D](other: ProxyNeedsProof[A, B, C, D])(implicit connect: DownstreamOut => A, connect2: D => UpstreamIn, connect3: B => C): Proxy[DownstreamIn, B, C, UpstreamOut] =
+    combine(other)
+
   def combine[A, B, C, D](other: ProxyNeedsProof[A, B, C, D])(implicit connect: DownstreamOut => A, connect2: D => UpstreamIn, connect3: B => C): Proxy[DownstreamIn, B, C, UpstreamOut] = {
     val down = downstream andThen other.downstream
     val up = upstream compose other.upstream
@@ -87,11 +90,12 @@ trait ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut] exte
       asDefaultString
   }
 
-  override def toString =
+  override val toString =
     toShortString
 
-  override def hashCode: Int =
-    downstream.hashCode * 31 + upstream.hashCode
+  override val hashCode: Int =
+    (downstream.hashCode * 31) +
+    upstream.hashCode
 
   override def equals(other: Any): Boolean = other match {
     case ref: AnyRef if ref eq this => true
@@ -104,6 +108,8 @@ trait Proxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
   extends ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
   with Chained[DownstreamIn, UpstreamOut]
   with Run[DownstreamIn, UpstreamOut] {
+
+  import scala.language.higherKinds
 
   implicit val proofDownstreamCanMapToUpstream: Link[DownstreamOut, UpstreamIn]
 
@@ -121,6 +127,23 @@ trait Proxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
 
   implicit lazy val toLink: Link[DownstreamIn, UpstreamOut] =
     Link(name)(toFunction)(downstream.typeIn, upstream.typeOut)
+
+  def |>[S, F[_]](runner: RunnerNeedsProxy[S, F])(implicit converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] =
+    lift(runner)
+
+  def lift[S, F[_]](runner: RunnerNeedsProxy[S, F])(implicit converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] =
+    Runner.withUnliftedProxy(runner.name, this, newChainRunner(), runner.state, runner.ops, rewireOnFlatMap = true)(converter, runner.typeState, typeFofD, typeFofD)
+
+  override val hashCode: Int =
+    (downstream.hashCode * 31 * 31) +
+    (proofDownstreamCanMapToUpstream.hashCode * 31) +
+    upstream.hashCode
+
+  override def equals(other: Any): Boolean = other match {
+    case ref: AnyRef if ref eq this => true
+    case ref: Proxy[_, _, _, _] if ref.downstream == downstream && ref.upstream == upstream && ref.proofDownstreamCanMapToUpstream == proofDownstreamCanMapToUpstream => true
+    case _ => false
+  }
 }
 
 object Proxy {

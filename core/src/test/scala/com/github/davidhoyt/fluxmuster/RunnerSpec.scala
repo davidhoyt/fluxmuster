@@ -5,49 +5,85 @@ class RunnerSpec extends UnitSpec {
   import scala.concurrent.duration._
   import scala.util.Success
   import Links._
+  import Proxies._
   import runner._
+
+  import scala.concurrent.ExecutionContext.Implicits.global
 
   import scala.language.implicitConversions
 
   behavior of Macros.simpleNameOf[Runner.type]
 
-  it should "do this" in {
-    import scala.concurrent.ExecutionContext.Implicits.global
+  it should s"implicitly convert to ${Macros.simpleNameOf[Proxy.type]} and lift into multiple runners" in {
+    val r1 = p1 |> Serial("s1") |> Serial() |> Async("a1")
+    val result = r1.run("0")
+    r1.runnerChain.map(_.name) should be(Vector("s1", Serial.defaultName, "a1"))
+    Await.result(result, 10.seconds) should be("3")
+  }
 
-    val bar =
-      Proxy("p1", linkS2L ~> linkInc2Mult1, linkMult2Dec1 ~> linkI2S) flatMap { a =>
-        Proxy("p2", linkInc2Mult1, linkMult2Dec1) flatMap { b =>
-          Proxy("p3", linkInc1, linkMult2Dec1) flatMap { c =>
+  it should s"compose using symbolic operators" in {
+    val r1 =
+      for {
+        pp1 <- p1
+        pp2 <- p2
+        pp3 <- p3
+        proxy <- pp1 <~> pp2 <~> pp3
+        _ <- pp1 <~> pp2 <~> pp3 |> Serial() //ignore
+        _ <- p1 <~> p2 <~> p3 |> Async()     //ignore
+      } yield proxy |> Serial("s1") |> Async("a1")
+
+    r1.runnerChain.map(_.name) should be(Vector("s1", "a1"))
+    Await.result(r1.run("0"), 10.seconds) should be("33")
+  }
+
+  it should s"compose cleanly without syntactic sugar with multiple runners" in {
+    val r1 =
+      p1 flatMap { a =>
+        p2 flatMap { b =>
+          p3 flatMap { c =>
             Serial("s1", a combine b combine c) flatMap { d =>
-              Serial("s2", d) map { e =>
-                Async("a3", e) map { f =>
-//                  Async("a4", c) map { g =>
-//                    println(f.runnerChain.map(_.name))
-//                    g
-//                  }
-                  f
+              Serial("s2", d) flatMap { e =>
+                Async("a3", e) flatMap { f =>
+                  Async("a4", f) map { g =>
+                    //println(f.runnerChain.map(_.name))
+                    g
+                  }
                 }
-//                e
               }
-//              d
             }
           }
         }
       }
 
-    Await.result(bar.run("0"), 10.seconds) should be ("33")
-    //println(bar.asDefaultString)
+    Await.result(r1.run("0"), 10.seconds) should be("33")
+    r1.runnerChain.map(_.name) should be(Vector("s1", "s2", "a3", "a4"))
+  }
 
-    val foo =
+  it should s"compose with for comprehensions and ignore filters" in {
+    val singleRunnerDoNotUseAllProxies =
       for {
-        p1: ProxyNeedsProof[String, Long, Int, String] <- Proxy("p1", linkS2L ~> linkInc2Mult1, linkMult2Dec1 ~> linkI2S) if false
-        p2: ProxyNeedsProof[Long, Long, Int, Int] <- Proxy("p2", linkInc2Mult1, linkMult2Dec1) if true
-        p3: ProxyNeedsProof[Long, Long, Int, Int] <- Proxy("p3", linkInc1, linkMult2Dec1) if false
-        //Only thing we know is DownstreamOut and UpstreamIn at this point
-        //Same for subsequent Runners (Lifts)
-        r1 <- Serial("r1", p1 combine p2)
-        //r2 <- Serial("r2", r1)
-      } yield r1
+        pp1 <- p1 if false
+        pp2 <- p2 if true
+        pp3 <- p3 if false
+        s1 <- Serial("s1", pp1 <~> pp2)
+      } yield s1
+
+    val result1 = singleRunnerDoNotUseAllProxies.run("3")
+    result1 should be (Success("25"))
+    singleRunnerDoNotUseAllProxies.runnerChain.map(_.name) should be (Vector("s1"))
+
+    val doubleRunner =
+      singleRunnerDoNotUseAllProxies lift Serial("s2")
+    doubleRunner.runnerChain.map(_.name) should be (Vector("s1", "s2"))
+
+    val doubleRunner2 =
+      singleRunnerDoNotUseAllProxies |> Async("a1")
+    doubleRunner2.runnerChain.map(_.name) should be (Vector("s1", "a1"))
+
+    val doubleRunner3 =
+      doubleRunner2 |> Async("a2") |> Async("a3") |> Async("a4")
+    doubleRunner3.runnerChain.map(_.name) should be (Vector("s1", "a1", "a2", "a3", "a4"))
+    Await.result(doubleRunner3.run("3"), 10.seconds) should be ("25")
 
     val simpleRunnerMapWithLink =
       for {
@@ -66,9 +102,5 @@ class RunnerSpec extends UnitSpec {
         r1 <- Serial("r1", linkS2L ~> linkInc2Mult1)
         r2 <- Serial("r2", r1)
       } yield r2
-
-    //println(foo.chain.asDefaultString)
-    val r = foo.run("3")
-    r should be (Success("25")) //TODO: Check that
   }
 }

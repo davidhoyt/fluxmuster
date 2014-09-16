@@ -61,7 +61,7 @@ sealed trait Link[In, Out] extends Chained[In, Out] with Run[In, Out] { self: Na
       short
   }
 
-  override def toString =
+  override val toString =
     toShortString
 
   lazy val runner =
@@ -118,8 +118,9 @@ sealed trait Link[In, Out] extends Chained[In, Out] with Run[In, Out] { self: Na
         Link.this.apply(other.apply(aToIn(a))(identity, otherOutToThisIn))
     }
 
-  override def hashCode: Int =
-    typeIn.hashCode() * 31 + typeOut.hashCode()
+  override val hashCode: Int =
+    (typeIn.hashCode() * 31) +
+    typeOut.hashCode()
 
   override def equals(other: Any): Boolean =
     other match {
