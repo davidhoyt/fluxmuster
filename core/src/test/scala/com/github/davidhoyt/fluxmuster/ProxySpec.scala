@@ -1,6 +1,7 @@
 package com.github.davidhoyt.fluxmuster
 
 class ProxySpec extends UnitSpec {
+  import Chains._
   import Links._
 
   behavior of Macros.simpleNameOf[Proxy.type]
@@ -16,7 +17,7 @@ class ProxySpec extends UnitSpec {
         }
       }
     unSugared.run("0") should be ("33")
-    unSugared.chain should be (newChainLink(linkS2L, linkInc2, linkMult1, linkInc2, linkMult1, linkInc1, (longToInt _).toLink /* proof */, linkMult2, linkDec1, linkMult2, linkDec1, linkMult2, linkDec1, linkI2S))
+    unSugared.chain should be (newLinkChain(linkS2L, linkInc2, linkMult1, linkInc2, linkMult1, linkInc1, (longToInt _).toLink /* proof */, linkMult2, linkDec1, linkMult2, linkDec1, linkMult2, linkDec1, linkI2S))
 
     val onlyCombinesSpecifiedProxies =
       for {
@@ -27,7 +28,7 @@ class ProxySpec extends UnitSpec {
         p4 <- p1 combine p2 if true
       } yield p4
     onlyCombinesSpecifiedProxies.run("0") should be ("13")
-    onlyCombinesSpecifiedProxies.chain should be (newChainLink(linkS2L, linkInc2, linkMult1, linkInc2, linkMult1, (longToInt _).toLink /* proof */, linkMult2, linkDec1, linkMult2, linkDec1, linkI2S))
+    onlyCombinesSpecifiedProxies.chain should be (newLinkChain(linkS2L, linkInc2, linkMult1, linkInc2, linkMult1, (longToInt _).toLink /* proof */, linkMult2, linkDec1, linkMult2, linkDec1, linkI2S))
     //println(foo.chain.asDefaultString)
 
     val combineWithTupled =
@@ -35,7 +36,7 @@ class ProxySpec extends UnitSpec {
         fromTuple <- (linkInc1, linkMult2Dec1).toProxy("fromTuple")
       } yield onlyCombinesSpecifiedProxies combine fromTuple
     combineWithTupled.run("0") should be ("33")
-    combineWithTupled.chain should be (newChainLink(linkS2L, linkInc2, linkMult1, linkInc2, linkMult1, linkInc1, (longToInt _).toLink /* proof */, linkMult2, linkDec1, linkMult2, linkDec1, linkMult2, linkDec1, linkI2S))
+    combineWithTupled.chain should be (newLinkChain(linkS2L, linkInc2, linkMult1, linkInc2, linkMult1, linkInc1, (longToInt _).toLink /* proof */, linkMult2, linkDec1, linkMult2, linkDec1, linkMult2, linkDec1, linkI2S))
     combineWithTupled.chain should be (unSugared.chain)
     combineWithTupled should be (unSugared)
   }

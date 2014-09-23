@@ -1,13 +1,15 @@
 package com.github.davidhoyt.fluxmuster
 
 trait Chained[In, Out] {
+  import Chains._
+
   val typeIn: TypeTagTree[In]
   val typeOut: TypeTagTree[Out]
 
   def asDefaultString: String
   def asShortString: String
 
-  def chain: ChainLink
+  def chain: LinkChain
   def runner: In => Out
 
   def runChain(in: In): Out = {

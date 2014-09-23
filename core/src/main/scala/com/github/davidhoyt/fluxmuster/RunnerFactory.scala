@@ -3,6 +3,8 @@ package com.github.davidhoyt.fluxmuster
 import scala.language.higherKinds
 
 trait RunnerFactory[State, Into[_]] {
+  import Chains._
+
   val defaultName: String
   protected val ops: RunnerOps[State, Into]
 
@@ -10,7 +12,7 @@ trait RunnerFactory[State, Into[_]] {
     Runner.withRunner(name, runner, state, ops, rewireOnFlatMap = true)
 
   def apply[A, B, C, D](name: String, proxy: Proxy[A, B, C, D])(implicit state: State, converter: Into -> Into, typeState: TypeTagTree[State], typeOut: TypeTagTree[Into[D]]): Runner[A, B, C, D, State, Into, Into] =
-    Runner.withUnliftedProxy(name, proxy, EmptyChainRunner, state, ops, rewireOnFlatMap = true)
+    Runner.withUnliftedProxy(name, proxy, RunnerDataChainEmpty, state, ops, rewireOnFlatMap = true)
 
   def apply[A, D](name: String, link: Link[A, D])(implicit state: State, converter: Into -> Into, typeState: TypeTagTree[State], typeOut: TypeTagTree[Into[D]]): Runner[A, A, D, D, State, Into, Into] =
     apply(name, link.toProxy)

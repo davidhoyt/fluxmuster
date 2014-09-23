@@ -4,8 +4,7 @@ package object fluxmuster {
   import scala.collection._
   import scala.concurrent.{ExecutionContext, Future}
   import scala.util.Try
-  import com.github.davidhoyt.fluxmuster.TypeTagTree
-  import runner._
+  import Chains._
 
   import scala.language.higherKinds
   import scala.language.existentials
@@ -18,7 +17,7 @@ package object fluxmuster {
     Link[In, Out]
 
   /**
-   * An arrow that maps between two categories `From` and `To`.
+   * An arrow that maps between a domain `From` and its codomain `To`.
    *
    * This is an alias for `->`.
    */
@@ -26,71 +25,22 @@ package object fluxmuster {
 
   implicit val EmptyUnit: Unit = ()
 
-  type ChainableLink =
+  type LinkAny =
     Chained[_, _]
 
-  type ChainableRunnerOps =
+  type RunnerOpsAny =
     RunnerOps[_ >: Any <: Any, Into forSome { type Into[_] }]
 
-  type ChainableRunner =
+  type RunnerDataAny =
     RunnerData[_, _, _, From forSome { type From[_] }, Into forSome { type Into[_] }]
 
-  type ChainableRunner2 =
+  type Runner2DataAny =
     Runner2Data[_, From forSome { type From[_] }, Into forSome { type Into[_] }]
 
-  type ExistentialLink =
+  type LinkExistential =
     Link[_ >: Any <: Any, _ >: Any <: Any]
 
-  type ChainLink = immutable.Vector[ChainableLink]
-  val EmptyChainLink = immutable.Vector[ChainableLink]()
-
-  def newChainLink(chainLink: ChainableLink*): ChainLink =
-    if ((chainLink ne null) && chainLink.nonEmpty)
-      immutable.Vector[ChainableLink](chainLink:_*)
-    else
-      EmptyChainLink
-
-  type ChainRunner     = immutable.Vector[ChainableRunner]
-  val EmptyChainRunner = immutable.Vector[ChainableRunner]()
-
-  def newChainRunner(runners: ChainableRunner*): ChainRunner =
-    if ((runners ne null) && runners.nonEmpty)
-      immutable.Vector[ChainableRunner](runners:_*)
-    else
-      EmptyChainRunner
-
-  type ChainRunner2     = immutable.Vector[ChainableRunner2]
-  val EmptyChainRunner2 = immutable.Vector[ChainableRunner2]()
-
-  def newChainRunner2(runners: ChainableRunner2*): ChainRunner2 =
-    if ((runners ne null) && runners.nonEmpty)
-      immutable.Vector[ChainableRunner2](runners:_*)
-    else
-      EmptyChainRunner2
-
-  type ChainRunnerOps     = immutable.Vector[ChainableRunnerOps]
-  val EmptyChainRunnerOps = immutable.Vector[ChainableRunnerOps]()
-
-  def newChainRunnerOps(ops: ChainableRunnerOps*): ChainRunnerOps =
-    if ((ops ne null) && ops.nonEmpty)
-      immutable.Vector[ChainableRunnerOps](ops:_*)
-    else
-      EmptyChainRunnerOps
-
-  def liftChainRunnerPoint[A, S, G[_]](runnerChain: ChainRunner, value: A): G[_] = {
-    val f = runnerChain.foldLeft(value: Any) {
-      case (a, cr) =>
-        cr.ops.point(a)
-    }
-    f.asInstanceOf[G[_]]
-  }
-
   type SideEffecting[Out] = Out => Unit
-  type ChainSideEffects[Out] = immutable.Vector[SideEffecting[Out]]
-  def EmptyChainSideEffects[Out] = immutable.Vector[SideEffecting[Out]]()
-
-  type FnChainLink =
-    (ChainableLink, ChainLink, ChainLink) => ChainLink
 
   implicit object IdentityConverter {
     def apply[F[_]] = new Converter[F, F] {
@@ -163,7 +113,7 @@ package object fluxmuster {
   implicit def functionToLink[In, Out](fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
     fn.toLink
 
-  implicit class ChainLinkEnhancements(val chainLink: ChainLink) extends AnyVal {
+  implicit class ChainLinkEnhancements(val chainLink: LinkChain) extends AnyVal {
     def asDefaultString =
       chainLink.map(_.asDefaultString).mkString(", ")
 
@@ -206,7 +156,7 @@ package object fluxmuster {
 
     private val logger = Logger(LoggerFactory.getLogger(Macros.nameOf[FutureRunnerOps.type]))
 
-    def liftRunner[A, D](linksChain: ChainLink, opsChain: ChainedRunnerOps[Future], runner: A => D)(implicit ec: ExecutionContext, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] =
+    def liftRunner[A, D](linksChain: LinkChain, opsChain: ChainedRunnerOps[Future], runner: A => D)(implicit ec: ExecutionContext, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] =
       (a: A) =>
         Future {
           runner(a)

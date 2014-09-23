@@ -5,21 +5,22 @@ import com.github.davidhoyt.fluxmuster.Proxy
 import scala.annotation.tailrec
 
 sealed case class Runner2Data[State, From[_], Into[_]](name: String, state: State, ops: RunnerOps[State, Into])(implicit val converter: From -> Into, val typeState: TypeTagTree[State]) {
-  def asChainableRunner: ChainableRunner2 =
-    this.asInstanceOf[ChainableRunner2]
+  def asChainableRunner: Runner2DataAny =
+    this.asInstanceOf[Runner2DataAny]
 }
 
 trait Runner2[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, From[_], Into[_]]
 extends Run[DownstreamIn, Into[UpstreamOut]]
 with Named {
+  import Chains._
 
-  sealed case class Materialized(state: State, links: ChainLink, runners: ChainRunner2, runner: Link[DownstreamIn, Into[UpstreamOut]])
+  sealed case class Materialized(state: State, links: LinkChain, runners: Runner2Chain, runner: Link[DownstreamIn, Into[UpstreamOut]])
 
-  def materialize(state: State, ops: RunnerOps[State, Into], links: ChainLink, runners: ChainRunner2): Materialized
+  def materialize(state: State, ops: RunnerOps[State, Into], links: LinkChain, runners: Runner2Chain): Materialized
 
   val givenState: State
-  val givenLinks: ChainLink
-  val givenRunners: ChainRunner2
+  val givenLinks: LinkChain
+  val givenRunners: Runner2Chain
 
   val proxy: Proxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
 
@@ -54,13 +55,13 @@ with Named {
   def runners =
     materialized.runners
 
-  protected def createChainRunnerWithThis(givenState: State, givenRunners: ChainRunner2): ChainRunner2 = {
+  protected def createChainRunnerWithThis(givenState: State, givenRunners: Runner2Chain): Runner2Chain = {
     val data =
       Runner2Data(name, givenState, ops)(converter, typeState)
         .asChainableRunner
 
     if ((givenRunners eq null) || givenRunners.isEmpty)
-      newChainRunner2(data)
+      newRunner2Chain(data)
     else
       givenRunners :+ data
   }

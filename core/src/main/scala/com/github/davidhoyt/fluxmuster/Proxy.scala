@@ -108,12 +108,13 @@ trait Proxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
   extends ProxyNeedsProof[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
   with Chained[DownstreamIn, UpstreamOut]
   with Run[DownstreamIn, UpstreamOut] {
+  import Chains._
 
   import scala.language.higherKinds
 
   implicit val proofDownstreamCanMapToUpstream: Link[DownstreamOut, UpstreamIn]
 
-  implicit val chain: ChainLink =
+  implicit val chain: LinkChain =
     downstream.chain ++ (proofDownstreamCanMapToUpstream +: upstream.chain)
 
   def run(in: DownstreamIn): UpstreamOut =
@@ -132,7 +133,7 @@ trait Proxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
     lift(other)
 
   def lift[A >: DownstreamIn, D <: UpstreamOut, S, F[_]](other: RunnerNeedsProxy[A, D, S, F])(implicit converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] = {
-    val runner = Runner.withUnliftedProxy(other.name, this, newChainRunner(), other.state, other.ops, rewireOnFlatMap = true, mapState = other.mapState)(converter, other.typeState, typeFofD, typeFofD)
+    val runner = Runner.withUnliftedProxy(other.name, this, newRunnerDataChain(), other.state, other.ops, rewireOnFlatMap = true, mapState = other.mapState)(converter, other.typeState, typeFofD, typeFofD)
     runner
   }
 

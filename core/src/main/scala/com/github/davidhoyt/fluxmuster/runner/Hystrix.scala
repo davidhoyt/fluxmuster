@@ -10,6 +10,7 @@ case class HystrixConfiguration(group: String = "default", command: String = "de
 object Hystrix {
   import com.netflix.hystrix.{HystrixCommandGroupKey, HystrixCommandKey, HystrixCommandProperties}
   import scala.concurrent.{Promise, Future}
+  import Chains._
 
   //B = return value or fallback
   //A = optional value to call the hystrix command with
@@ -40,7 +41,7 @@ object Hystrix {
     def map[A, B](given: Future[A])(fn: A => B)(implicit state: State): Future[B] =
       FutureRunnerOps.map(given)(fn)(state.configuration.context)
 
-    def liftRunner[A, D](linksChain: ChainLink, opsChain: ChainedRunnerOps[Future], runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] = {
+    def liftRunner[A, D](linksChain: LinkChain, opsChain: ChainedRunnerOps[Future], runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] = {
 
 
 //      //typeOut = Future[D]
@@ -65,10 +66,10 @@ object Hystrix {
     }
   }
 
-  def mapStateOnLift(state: State, other: ChainRunner): State = {
+  def mapStateOnLift(state: State, other: RunnerDataChain): State = {
     //val f = liftChainRunnerPoint(other, state)
-    val foo = state.fallback.map(f => liftChainRunnerPoint(other, f()): Any)
-    val liftedFallback = state.fallback.map(f => () => liftChainRunnerPoint(other, f()): Any)
+//    val foo = state.fallback.map(f => liftChainRunnerPoint(other, f()): Any)
+//    val liftedFallback = state.fallback.map(f => () => liftChainRunnerPoint(other, f()): Any)
     //The fallback must also be lifted up the chain so that it can be applied
     //to the resulting lifted value if necessary.
 //        val liftedFallback = other.foldLeft(state.fallback) {
@@ -78,8 +79,9 @@ object Hystrix {
 
     //Create a new state where the fallback has been properly lifted into
     //context and which should be used for runs.
-    val newState = state.copy(fallback = liftedFallback)
-    newState
+//    val newState = state.copy(fallback = liftedFallback)
+//    newState
+    ???
   }
 
   private def create[A, D](providedName: String, configuration: HystrixConfiguration, chained: Chained[A, D], fallback: => Option[() => D])(implicit typeOut: TypeTagTree[Future[D]]): RunnerNeedsProxy[A, D, State, Future] = {

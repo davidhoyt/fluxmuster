@@ -16,11 +16,12 @@ package com.github.davidhoyt.fluxmuster
  */
 sealed trait Link[In, Out] extends Chained[In, Out] with Run[In, Out] { self: Named =>
   import scala.collection._
+  import Chains._
 
   implicit val typeIn: TypeTagTree[In]
   implicit val typeOut: TypeTagTree[Out]
 
-  implicit val chain: ChainLink
+  implicit val chain: LinkChain
 
   val sideEffects: ChainSideEffects[Out]
 
@@ -140,45 +141,46 @@ sealed trait Link[In, Out] extends Chained[In, Out] with Run[In, Out] { self: Na
 
 object Link {
   import scala.collection.immutable
+  import Chains._
 
-  private[fluxmuster] abstract case class Build[In, Out](name: String, mine: ChainLink, otherLink: ChainLink, chaining: FnChainLink, override val asShortString: String = null, sideEffects: ChainSideEffects[Out] = EmptyChainSideEffects[Out])(implicit val typeIn: TypeTagTree[In], val typeOut: TypeTagTree[Out]) extends Link[In, Out] with Named {
+  private[fluxmuster] abstract case class Build[In, Out](name: String, mine: LinkChain, otherLink: LinkChain, chaining: FnChainLink, override val asShortString: String = null, sideEffects: ChainSideEffects[Out] = EmptyChainSideEffects[Out])(implicit val typeIn: TypeTagTree[In], val typeOut: TypeTagTree[Out]) extends Link[In, Out] with Named {
     lazy val chain =
       chainTogether(this, mine, otherLink)
 
-    def chainTogether(instance: ChainableLink, mine: ChainLink, other: ChainLink): ChainLink =
+    def chainTogether(instance: LinkAny, mine: LinkChain, other: LinkChain): LinkChain =
       chaining(instance, mine, other)
   }
 
-  private[fluxmuster] def linkCombined(instance: ChainableLink, mine: ChainLink, other: ChainLink): ChainLink =
-    (mine ++ other).foldLeft(EmptyChainLink) {
+  private[fluxmuster] def linkCombined(instance: LinkAny, mine: LinkChain, other: LinkChain): LinkChain =
+    (mine ++ other).foldLeft(LinkChainEmpty) {
       case (seq, p) if p.chain.nonEmpty =>
         seq :+ p.chain.head
       case (seq, _) =>
         seq
     }
 
-  private[fluxmuster] def linkProvided(instance: ChainableLink, mine: ChainLink, other: ChainLink): ChainLink =
+  private[fluxmuster] def linkProvided(instance: LinkAny, mine: LinkChain, other: LinkChain): LinkChain =
     if ((mine eq null) || mine.isEmpty)
       immutable.Vector(instance)
     else
       mine
 
   def apply[In, Out](fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
-    create[In, Out](EmptyChainLink, EmptyChainLink, linkProvided _)(fn)(typeIn, typeOut)
+    create[In, Out](LinkChainEmpty, LinkChainEmpty, linkProvided _)(fn)(typeIn, typeOut)
 
   def apply[In, Out](name: String)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
-    create[In, Out](name, EmptyChainLink, EmptyChainLink, linkProvided _, EmptyChainSideEffects[Out])(fn)(typeIn, typeOut)
+    create[In, Out](name, LinkChainEmpty, LinkChainEmpty, linkProvided _, EmptyChainSideEffects[Out])(fn)(typeIn, typeOut)
 
   def withSideEffects[In, Out](name: String, link: Link[In, Out])(sideEffects: SideEffecting[Out]*): Link[In, Out] =
-    create(name, link.chain, EmptyChainLink, linkProvided _, sideEffects.toVector)(link.run)(link.typeIn, link.typeOut)
+    create(name, link.chain, LinkChainEmpty, linkProvided _, sideEffects.toVector)(link.run)(link.typeIn, link.typeOut)
 
-  def create[In, Out](mine: ChainLink, other: ChainLink, chaining: FnChainLink)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
+  def create[In, Out](mine: LinkChain, other: LinkChain, chaining: FnChainLink)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
     create[In, Out](fn.toString(), mine, other, chaining, EmptyChainSideEffects[Out])(fn)(typeIn, typeOut)
 
-  def create[In, Out](name: String, mine: ChainLink, other: ChainLink, chaining: FnChainLink)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
+  def create[In, Out](name: String, mine: LinkChain, other: LinkChain, chaining: FnChainLink)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
     create[In, Out](name, mine, other, chaining, EmptyChainSideEffects[Out])(fn)(typeIn, typeOut)
 
-  def create[In, Out](name: String, mine: ChainLink, other: ChainLink, chaining: FnChainLink, sideEffects: ChainSideEffects[Out])(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
+  def create[In, Out](name: String, mine: LinkChain, other: LinkChain, chaining: FnChainLink, sideEffects: ChainSideEffects[Out])(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
     new Build[In, Out](name, mine, other, chaining, s"${typeIn.toShortString} => ${typeOut.toShortString}", sideEffects)(typeIn, typeOut) {
       protected def runLink[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B =
         outToB(fn(aToIn(a)))

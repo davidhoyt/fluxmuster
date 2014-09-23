@@ -5,12 +5,13 @@ import scala.language.higherKinds
 trait RunnerOps[State, Into[_]] {
   import com.typesafe.scalalogging.Logger
   import org.slf4j.LoggerFactory
+  import Chains._
 
 import scala.language.implicitConversions
 
   private val logger = Logger(LoggerFactory.getLogger(getClass))
 
-  def liftRunner[A, D](linksChain: ChainLink, opsChain: ChainedRunnerOps[Into], runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Into[D]
+  def liftRunner[A, D](linksChain: LinkChain, opsChain: ChainedRunnerOps[Into], runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Into[D]
   def point[A](given: => A): Into[A]
   def flatten[A](given: Into[Into[A]])(implicit state: State): Into[A]
   def map[A, B](given: Into[A])(fn: A => B)(implicit state: State): Into[B]
@@ -18,7 +19,7 @@ import scala.language.implicitConversions
   def flatMap[A, B, G[_]](given: Into[A])(fn: A => G[B])(implicit state: State, converter: G -> Into): Into[B] =
     flatten(map(map(given)(fn)(state))(converter.apply)(state))(state)
 
-  def runInThisContext[A, D, From[_]](linksChain: ChainLink, opsChain: ChainedRunnerOps[Into], otherRunner: A => From[D], state: State)(implicit converter: From -> Into, typeIn: TypeTagTree[A], typeFromOut: TypeTagTree[From[D]], typeIntoOut: TypeTagTree[Into[D]]): Link[A, Into[D]] = {
+  def runInThisContext[A, D, From[_]](linksChain: LinkChain, opsChain: ChainedRunnerOps[Into], otherRunner: A => From[D], state: State)(implicit converter: From -> Into, typeIn: TypeTagTree[A], typeFromOut: TypeTagTree[From[D]], typeIntoOut: TypeTagTree[Into[D]]): Link[A, Into[D]] = {
     Link((in: A) => {
       val runOtherInThisContext: A => Into[From[D]] = liftRunner(linksChain, opsChain, otherRunner)(state, typeIn, typeFromOut)
       val resultAfterRunning: Into[From[D]] = runOtherInThisContext(in)
@@ -43,6 +44,6 @@ import scala.language.implicitConversions
   def unsafeCastAsState[S](instance: S): State =
     instance.asInstanceOf[State]
 
-  implicit def asChainableRunnerOps: ChainableRunnerOps =
-    this.asInstanceOf[ChainableRunnerOps]
+  implicit def asChainableRunnerOps: RunnerOpsAny =
+    this.asInstanceOf[RunnerOpsAny]
 }
