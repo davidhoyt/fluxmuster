@@ -8,6 +8,11 @@ package com.github.davidhoyt.fluxmuster
  * information recorded for runtime reflection and all composed links are
  * tracked as a chain of links/functions that represent the combined
  * path to the current link.
+ *
+ * Assuming all links in a composed chain are non-side-effecting, then
+ * this allows for runtime introspection and possible execution plans
+ * with plan optimizations and reordering as well as partitioning and
+ * concurrent execution.
  */
 sealed trait Link[In, Out] extends Chained[In, Out] with Run[In, Out] { self: Named =>
   import scala.collection._
@@ -158,23 +163,23 @@ object Link {
     else
       mine
 
-  def apply[In, Out](fn: In => Out)(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Link[In, Out] =
-    create[In, Out](EmptyChainLink, EmptyChainLink, linkProvided _)(fn)(tIn, tOut)
+  def apply[In, Out](fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
+    create[In, Out](EmptyChainLink, EmptyChainLink, linkProvided _)(fn)(typeIn, typeOut)
 
-  def apply[In, Out](name: String)(fn: In => Out)(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Link[In, Out] =
-    create[In, Out](name, EmptyChainLink, EmptyChainLink, linkProvided _, EmptyChainSideEffects[Out])(fn)(tIn, tOut)
+  def apply[In, Out](name: String)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
+    create[In, Out](name, EmptyChainLink, EmptyChainLink, linkProvided _, EmptyChainSideEffects[Out])(fn)(typeIn, typeOut)
 
   def withSideEffects[In, Out](name: String, link: Link[In, Out])(sideEffects: SideEffecting[Out]*): Link[In, Out] =
     create(name, link.chain, EmptyChainLink, linkProvided _, sideEffects.toVector)(link.run)(link.typeIn, link.typeOut)
 
-  def create[In, Out](mine: ChainLink, other: ChainLink, chaining: FnChainLink)(fn: In => Out)(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Link[In, Out] =
-    create[In, Out](fn.toString(), mine, other, chaining, EmptyChainSideEffects[Out])(fn)(tIn, tOut)
+  def create[In, Out](mine: ChainLink, other: ChainLink, chaining: FnChainLink)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
+    create[In, Out](fn.toString(), mine, other, chaining, EmptyChainSideEffects[Out])(fn)(typeIn, typeOut)
 
-  def create[In, Out](name: String, mine: ChainLink, other: ChainLink, chaining: FnChainLink)(fn: In => Out)(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Link[In, Out] =
-    create[In, Out](name, mine, other, chaining, EmptyChainSideEffects[Out])(fn)(tIn, tOut)
+  def create[In, Out](name: String, mine: ChainLink, other: ChainLink, chaining: FnChainLink)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
+    create[In, Out](name, mine, other, chaining, EmptyChainSideEffects[Out])(fn)(typeIn, typeOut)
 
-  def create[In, Out](name: String, mine: ChainLink, other: ChainLink, chaining: FnChainLink, sideEffects: ChainSideEffects[Out])(fn: In => Out)(implicit tIn: TypeTagTree[In], tOut: TypeTagTree[Out]): Link[In, Out] =
-    new Build[In, Out](name, mine, other, chaining, s"${tIn.toShortString} => ${tOut.toShortString}", sideEffects)(tIn, tOut) {
+  def create[In, Out](name: String, mine: ChainLink, other: ChainLink, chaining: FnChainLink, sideEffects: ChainSideEffects[Out])(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
+    new Build[In, Out](name, mine, other, chaining, s"${typeIn.toShortString} => ${typeOut.toShortString}", sideEffects)(typeIn, typeOut) {
       protected def runLink[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B =
         outToB(fn(aToIn(a)))
     }

@@ -103,4 +103,13 @@ class RunnerSpec extends UnitSpec {
         r2 <- Serial("r2", r1)
       } yield r2
   }
+
+  it should s"function properly with Hystrix" in {
+    val foo =
+      for {
+        s <- p1 <~> p2 <~> p3 <~> Proxy("a", (l: Long) => { Thread.sleep(1000L); l }, identity[Int] _)
+        f <- s |> Hystrix.withFallback(configuration = HystrixConfiguration())("boo!")
+      } yield f
+    Await.result(foo.run("0"), 2.seconds) should be ("33")
+  }
 }

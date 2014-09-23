@@ -128,11 +128,13 @@ trait Proxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
   implicit lazy val toLink: Link[DownstreamIn, UpstreamOut] =
     Link(name)(toFunction)(downstream.typeIn, upstream.typeOut)
 
-  def |>[S, F[_]](runner: RunnerNeedsProxy[S, F])(implicit converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] =
-    lift(runner)
+  def |>[A >: DownstreamIn, D <: UpstreamOut, S, F[_]](other: RunnerNeedsProxy[A, D, S, F])(implicit converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] =
+    lift(other)
 
-  def lift[S, F[_]](runner: RunnerNeedsProxy[S, F])(implicit converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] =
-    Runner.withUnliftedProxy(runner.name, this, newChainRunner(), runner.state, runner.ops, rewireOnFlatMap = true)(converter, runner.typeState, typeFofD, typeFofD)
+  def lift[A >: DownstreamIn, D <: UpstreamOut, S, F[_]](other: RunnerNeedsProxy[A, D, S, F])(implicit converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] = {
+    val runner = Runner.withUnliftedProxy(other.name, this, newChainRunner(), other.state, other.ops, rewireOnFlatMap = true, mapState = other.mapState)(converter, other.typeState, typeFofD, typeFofD)
+    runner
+  }
 
   override val hashCode: Int =
     (downstream.hashCode * 31 * 31) +

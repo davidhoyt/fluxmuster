@@ -15,9 +15,9 @@ trait RunnerFactory[State, Into[_]] {
   def apply[A, D](name: String, link: Link[A, D])(implicit state: State, converter: Into -> Into, typeState: TypeTagTree[State], typeOut: TypeTagTree[Into[D]]): Runner[A, A, D, D, State, Into, Into] =
     apply(name, link.toProxy)
 
-  def apply(name: String)(implicit state: State, converter: Into -> Into, typeState: TypeTagTree[State]): RunnerNeedsProxy[State, Into] =
+  def apply[A, D](name: String)(implicit state: State, converter: Into -> Into, typeState: TypeTagTree[State]): RunnerNeedsProxy[A, D, State, Into] =
     RunnerNeedsProxy(name, state, ops)
 
-  def apply()(implicit state: State, converter: Into -> Into, typeState: TypeTagTree[State]): RunnerNeedsProxy[State, Into] =
+  def apply[A, D]()(implicit state: State, converter: Into -> Into, typeState: TypeTagTree[State]): RunnerNeedsProxy[A, D, State, Into] =
     RunnerNeedsProxy(defaultName, state, ops)
 }

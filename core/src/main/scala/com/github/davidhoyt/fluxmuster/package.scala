@@ -29,11 +29,14 @@ package object fluxmuster {
   type ChainableLink =
     Chained[_, _]
 
-  type ChainableOps =
+  type ChainableRunnerOps =
     RunnerOps[_ >: Any <: Any, Into forSome { type Into[_] }]
 
   type ChainableRunner =
     RunnerData[_, _, _, From forSome { type From[_] }, Into forSome { type Into[_] }]
+
+  type ChainableRunner2 =
+    Runner2Data[_, From forSome { type From[_] }, Into forSome { type Into[_] }]
 
   type ExistentialLink =
     Link[_ >: Any <: Any, _ >: Any <: Any]
@@ -56,14 +59,31 @@ package object fluxmuster {
     else
       EmptyChainRunner
 
-  type ChainOps     = immutable.Vector[ChainableOps]
-  val EmptyChainOps = immutable.Vector[ChainableOps]()
+  type ChainRunner2     = immutable.Vector[ChainableRunner2]
+  val EmptyChainRunner2 = immutable.Vector[ChainableRunner2]()
 
-  def newChainOps(ops: ChainableOps*): ChainOps =
-    if ((ops ne null) && ops.nonEmpty)
-      immutable.Vector[ChainableOps](ops:_*)
+  def newChainRunner2(runners: ChainableRunner2*): ChainRunner2 =
+    if ((runners ne null) && runners.nonEmpty)
+      immutable.Vector[ChainableRunner2](runners:_*)
     else
-      EmptyChainOps
+      EmptyChainRunner2
+
+  type ChainRunnerOps     = immutable.Vector[ChainableRunnerOps]
+  val EmptyChainRunnerOps = immutable.Vector[ChainableRunnerOps]()
+
+  def newChainRunnerOps(ops: ChainableRunnerOps*): ChainRunnerOps =
+    if ((ops ne null) && ops.nonEmpty)
+      immutable.Vector[ChainableRunnerOps](ops:_*)
+    else
+      EmptyChainRunnerOps
+
+  def liftChainRunnerPoint[A, S, G[_]](runnerChain: ChainRunner, value: A): G[_] = {
+    val f = runnerChain.foldLeft(value: Any) {
+      case (a, cr) =>
+        cr.ops.point(a)
+    }
+    f.asInstanceOf[G[_]]
+  }
 
   type SideEffecting[Out] = Out => Unit
   type ChainSideEffects[Out] = immutable.Vector[SideEffecting[Out]]
@@ -186,13 +206,13 @@ package object fluxmuster {
 
     private val logger = Logger(LoggerFactory.getLogger(Macros.nameOf[FutureRunnerOps.type]))
 
-    def liftRunner[A, D](chain: ChainLink, runner: A => D)(implicit ec: ExecutionContext, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] =
+    def liftRunner[A, D](linksChain: ChainLink, opsChain: ChainedRunnerOps[Future], runner: A => D)(implicit ec: ExecutionContext, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] =
       (a: A) =>
         Future {
           runner(a)
         }
 
-    def point[A](given: => A)(implicit ec: ExecutionContext): Future[A] =
+    def point[A](given: => A): Future[A] =
       try Future.successful(given)
       catch {
         case NonFatal(error) =>

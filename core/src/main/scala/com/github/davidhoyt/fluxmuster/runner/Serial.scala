@@ -15,7 +15,7 @@ object Serial extends RunnerFactory[Unit, Try] {
 
       private val logger = Logger(LoggerFactory.getLogger(Macros.nameOf[Serial.type] + ".ops"))
 
-      def liftRunner[A, D](chained: ChainLink, runner: A => D)(implicit state: Unit, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Try[D] =
+      def liftRunner[A, D](linksChain: ChainLink, opsChain: ChainedRunnerOps[Try], runner: A => D)(implicit state: Unit, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Try[D] =
         (a: A) => Try(runner(a))
 
       def flatten[A](given: Try[Try[A]])(implicit state: Unit): Try[A] = {
@@ -25,7 +25,7 @@ object Serial extends RunnerFactory[Unit, Try] {
         r
       }
 
-      def point[A](given: => A)(implicit state: Unit): Try[A] =
+      def point[A](given: => A): Try[A] =
         Try(given)
 
       def map[A, B](given: Try[A])(fn: A => B)(implicit state: Unit): Try[B] = {
