@@ -1,6 +1,6 @@
 package com.github.davidhoyt.fluxmuster
 
-trait Chained[In, Out] {
+trait Chain[In, Out] {
   import Chains._
 
   val typeIn: TypeTagTree[In]

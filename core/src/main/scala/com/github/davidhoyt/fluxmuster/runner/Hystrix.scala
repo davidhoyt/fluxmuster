@@ -84,7 +84,7 @@ object Hystrix {
     ???
   }
 
-  private def create[A, D](providedName: String, configuration: HystrixConfiguration, chained: Chained[A, D], fallback: => Option[() => D])(implicit typeOut: TypeTagTree[Future[D]]): RunnerNeedsProxy[A, D, State, Future] = {
+  private def create[A, D](providedName: String, configuration: HystrixConfiguration, chained: Chain[A, D], fallback: => Option[() => D])(implicit typeOut: TypeTagTree[Future[D]]): RunnerNeedsProxy[A, D, State, Future] = {
 
     import scala.language.higherKinds
 

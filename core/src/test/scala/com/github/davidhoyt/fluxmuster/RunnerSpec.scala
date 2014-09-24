@@ -1,5 +1,11 @@
 package com.github.davidhoyt.fluxmuster
 
+object Foo {
+
+  trait T1
+
+}
+
 class RunnerSpec extends UnitSpec {
   import scala.concurrent.Await
   import scala.concurrent.duration._
@@ -14,11 +20,39 @@ class RunnerSpec extends UnitSpec {
 
   behavior of Macros.simpleNameOf[Runner.type]
 
-  it should s"implicitly convert to ${Macros.simpleNameOf[Proxy.type]} and lift into multiple runners" in {
+  it should s"implicitly convert to ${Macros.simpleNameOf[LinkedProxy.type]} and lift into multiple runners" in {
     val r1 = p1 |> Serial("s1") |> Serial() |> Async("a1")
     val result = r1.run("0")
     r1.runnerChain.map(_.name) should be(Vector("s1", Serial.defaultName, "a1"))
     Await.result(result, 10.seconds) should be("3")
+  }
+
+  it should s"allow composition without proof unless needed" in {
+    val r1 =
+      for {
+        p1 <- Proxy("t1/t2.1", Link.identity[T1], Link.identity[T2])
+        p2 <- Proxy("t1/t2.2", Link.identity[T1], Link.identity[T2])
+        p3 <- p1 <~> p2
+      } yield p3
+
+    ////Following should fail to compile because an implicit T1 => T2 is
+    ////not available.
+    //val r2 =
+    //  for {
+    //    p <- r1 |> Serial()
+    //  } yield p
+
+    //Following compiles because an implicit has been provided in scope
+    //to map from T1 to T2. Running it, though, should throw an exception.
+    val r3 = {
+      implicit def t1ToT2(t1: T1): T2 = ???
+
+      for {
+        p <- r1 lift Serial()
+      } yield p
+    }
+
+    r3(null).isSuccess should be (false)
   }
 
   it should s"compose using symbolic operators" in {

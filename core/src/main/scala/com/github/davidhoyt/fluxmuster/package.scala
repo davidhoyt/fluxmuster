@@ -26,7 +26,7 @@ package object fluxmuster {
   implicit val EmptyUnit: Unit = ()
 
   type LinkAny =
-    Chained[_, _]
+    Chain[_, _]
 
   type RunnerOpsAny =
     RunnerOps[_ >: Any <: Any, Into forSome { type Into[_] }]
@@ -106,8 +106,8 @@ package object fluxmuster {
     def link[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit proofMyOutputCanBeOtherIn: Out => OtherIn, typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out], typeOtherOut: TypeTagTree[OtherOut]): Link[In, OtherOut] =
       toLink andThen other
 
-    def toProxy(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Proxy[In, In, Out, Out] =
-      toLink.toProxy
+    def toLinkedProxy(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): LinkedProxy[In, In, Out, Out] =
+      toLink.toLinkedProxy
   }
 
   implicit def functionToLink[In, Out](fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
@@ -122,28 +122,31 @@ package object fluxmuster {
   }
 
   implicit class Tuple2Enhancements[A, B, C, D](val t: ((Downstream[A, B], Upstream[C, D]))) extends AnyVal {
-    implicit def toProxy(implicit proof: B => C): Proxy[A, B, C, D] =
-      toProxy("<~>")
+    implicit def toLinkedProxy(implicit proof: B => C): LinkedProxy[A, B, C, D] =
+      toLinkedProxy("<~>")
 
-    implicit def toProxy(name: String)(implicit proof: B => C): Proxy[A, B, C, D] = {
+    implicit def toLinkedProxy(name: String)(implicit proof: B => C): LinkedProxy[A, B, C, D] = {
       val (down, up) = t
-      Proxy(name, down, up, proof)(down.typeOut, up.typeIn)
+      Proxy.linked(name, down, up, proof)
     }
 
-    implicit def toProxyNeedsProof: ProxyNeedsProof[A, B, C, D] =
-      toProxyNeedsProof("<~>")
+    implicit def toProxy: Proxy[A, B, C, D] =
+      toProxy("<~>")
 
-    implicit def toProxyNeedsProof(name: String): ProxyNeedsProof[A, B, C, D] = {
+    implicit def toProxy(name: String): Proxy[A, B, C, D] = {
       val (down, up) = t
       Proxy(name, down, up)
     }
   }
 
-  implicit def proxyNeedsProofToProxy[A, B, C, D](proxy: ProxyNeedsProof[A, B, C, D])(implicit proofDownstreamCanMapToUpstream: B => C): Proxy[A, B, C, D] =
-    proxy.withProof(proofDownstreamCanMapToUpstream)
+  //implicit def proxyToRun[A, B, C, D](proxy: Proxy[A, B, C, D])(implicit proofDownstreamCanMapToUpstream: B => C): Run[A, D] =
+  //  proxyToLinkedProxy(proxy)
 
-  implicit def linkToProxy[A, D](link: Link[A, D]): Proxy[A, A, D, D] =
-    link.toProxy
+  implicit def proxyToLinkedProxy[A, B, C, D](proxy: Proxy[A, B, C, D])(implicit proofDownstreamCanMapToUpstream: B => C): LinkedProxy[A, B, C, D] =
+    proxy.linked(proofDownstreamCanMapToUpstream)
+
+  implicit def linkToLinkedProxy[A, D](link: Link[A, D]): LinkedProxy[A, A, D, D] =
+    link.toLinkedProxy
 
   def typeTagTreeOf[T](implicit ttt: TypeTagTree[T]) =
     TypeTagTree.typeTagTreeOf[T](ttt)

@@ -14,7 +14,10 @@ package com.github.davidhoyt.fluxmuster
  * with plan optimizations and reordering as well as partitioning and
  * concurrent execution.
  */
-sealed trait Link[In, Out] extends Chained[In, Out] with Run[In, Out] { self: Named =>
+sealed trait Link[In, Out]
+  extends Chain[In, Out]
+  with Run[In, Out] { self: Named =>
+
   import scala.collection._
   import Chains._
 
@@ -73,11 +76,11 @@ sealed trait Link[In, Out] extends Chained[In, Out] with Run[In, Out] { self: Na
   lazy val runner =
     toFunction
 
-  implicit lazy val toFunction: In => Out =
+  implicit val toFunction: In => Out =
     run
 
-  implicit lazy val toProxy: Proxy[In, In, Out, Out] =
-    Proxy(name, Link.identity[In], Link.identity[Out], toFunction)(typeIn, typeOut)
+  implicit lazy val toLinkedProxy: LinkedProxy[In, In, Out, Out] =
+    Proxy.linked(name, Link.identity[In], Link.identity[Out], toFunction)
 
   def asFunction[A, B](implicit aToIn: A => In, outToB: Out => B): A => B =
     (a: A) => apply(aToIn(a))(identity, outToB)
@@ -186,6 +189,6 @@ object Link {
         outToB(fn(aToIn(a)))
     }
 
-  def identity[A](implicit tA: TypeTagTree[A]): Link[A, A] =
-    (Predef.identity[A]_).toLink(tA, tA)
+  def identity[A](implicit typeA: TypeTagTree[A]): Link[A, A] =
+    (Predef.identity[A]_).toLink(typeA, typeA)
 }

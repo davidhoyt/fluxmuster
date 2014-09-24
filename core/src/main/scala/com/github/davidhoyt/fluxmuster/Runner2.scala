@@ -1,6 +1,6 @@
 package com.github.davidhoyt.fluxmuster
 
-import com.github.davidhoyt.fluxmuster.Proxy
+import com.github.davidhoyt.fluxmuster.LinkedProxy
 
 import scala.annotation.tailrec
 
@@ -22,7 +22,7 @@ with Named {
   val givenLinks: LinkChain
   val givenRunners: Runner2Chain
 
-  val proxy: Proxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
+  val proxy: LinkedProxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
 
   val ops: RunnerOps[State, Into]
   val converter: From -> Into
