@@ -190,5 +190,5 @@ object Link {
     }
 
   def identity[A](implicit typeA: TypeTagTree[A]): Link[A, A] =
-    (Predef.identity[A]_).toLink(typeA, typeA)
+    Link(Predef.identity[A]_)(typeA, typeA)
 }

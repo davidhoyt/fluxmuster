@@ -80,7 +80,7 @@ case class Lift[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, Fro
     def replaceWith = {
       val mappedProxy =
         proxy.map { p =>
-          Proxy.linked("<~>", p.downstream.map(b)(givenProxy.downstream.typeOut), c.toLink(givenProxy.upstream.typeIn, proxy.upstream.typeIn) andThen p.upstream, givenProxy.linkDownstreamToUpstream.toFunction)
+          Proxy.linked("<~>", p.downstream.map(b)(givenProxy.downstream.typeOut), Link(c)(givenProxy.upstream.typeIn, proxy.upstream.typeIn) andThen p.upstream, givenProxy.linkDownstreamToUpstream.toFunction)
         }
 
       Lift.proxy(name, mappedProxy, givenLiftChain, state, ops, rewireOnFlatMap = false)(converter, typeState, typeFromOfD, typeIntoOfD)
@@ -222,8 +222,6 @@ object Lift {
  * Describes a [[Lift]] that still needs a [[LinkedProxy]] in order to work.
  */
 trait PartialLift[-In, +Out, State, Into[_]] extends Named {
-  import Chains._
-
   val state: State
   val ops: LiftOps[State, Into]
   implicit val converter: Into -> Into

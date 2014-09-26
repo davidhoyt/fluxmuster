@@ -143,6 +143,8 @@ class LiftSpec extends UnitSpec {
   }
 
   it should s"function properly with Hystrix" in {
+    import Implicits._
+
     val foo =
       for {
         s <- p1 <~> p2 <~> p3 <~> (((l: Long) => { /*Thread.sleep(3000L);*/ l }, identity[Int] _))

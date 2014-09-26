@@ -36,7 +36,47 @@ package object fluxmuster {
   type LinkExistential =
     Link[_ >: Any <: Any, _ >: Any <: Any]
 
-  type SideEffecting[Out] = Out => Unit
+  type SideEffecting[Out] =
+    Out => Unit
+
+  def typeTagTreeOf[T](implicit ttt: TypeTagTree[T]) =
+    TypeTagTree.typeTagTreeOf[T](ttt)
+
+  implicit def functionToLink[In, Out](fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
+    Link(fn)
+
+  implicit def proxyToLinkedProxy[A, B, C, D](proxy: Proxy[A, B, C, D])(implicit proofDownstreamCanMapToUpstream: B => C): LinkedProxy[A, B, C, D] =
+    proxy.linked(proofDownstreamCanMapToUpstream)
+
+  implicit def linkToLinkedProxy[A, D](link: Link[A, D]): LinkedProxy[A, A, D, D] =
+    link.toLinkedProxy
+
+  implicit class LinkEnhancements[In, Out](val link: Link[In, Out]) extends AnyVal {
+    def toLink: Link[In, Out] =
+      link
+  }
+
+  implicit class FunctionEnhancements[In, Out](val fn: In => Out) extends AnyVal {
+    def toLink(name: String)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
+      Link(name)(fn)
+
+    def toLink(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
+      Link(fn)
+
+    def link[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit proofMyOutputCanBeOtherIn: Out => OtherIn, typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out], typeOtherOut: TypeTagTree[OtherOut]): Link[In, OtherOut] =
+      toLink andThen other
+
+    def toLinkedProxy(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): LinkedProxy[In, In, Out, Out] =
+      toLink.toLinkedProxy
+  }
+
+  implicit class ChainLinkEnhancements(val chainLink: LinkChain) extends AnyVal {
+    def asDefaultString =
+      chainLink.map(_.asDefaultString).mkString(", ")
+
+    def asShortString =
+      chainLink.map(_.asShortString).mkString(", ")
+  }
 
   implicit object IdentityConverter {
     def apply[F[_]] = new Converter[F, F] {
@@ -86,87 +126,6 @@ package object fluxmuster {
       }
     }
   }
-
-  implicit class LinkEnhancements[In, Out](val link: Link[In, Out]) extends AnyVal {
-    def toLink: Link[In, Out] =
-      link
-  }
-
-  implicit class FunctionEnhancements[In, Out](val fn: In => Out) extends AnyVal {
-    def toLink(name: String)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
-      Link(name)(fn)
-
-    def toLink(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
-      Link(fn)
-
-    def link[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit proofMyOutputCanBeOtherIn: Out => OtherIn, typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out], typeOtherOut: TypeTagTree[OtherOut]): Link[In, OtherOut] =
-      toLink andThen other
-
-    def toLinkedProxy(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): LinkedProxy[In, In, Out, Out] =
-      toLink.toLinkedProxy
-  }
-
-  implicit def functionToLink[In, Out](fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
-    fn.toLink
-
-  implicit class ChainLinkEnhancements(val chainLink: LinkChain) extends AnyVal {
-    def asDefaultString =
-      chainLink.map(_.asDefaultString).mkString(", ")
-
-    def asShortString =
-      chainLink.map(_.asShortString).mkString(", ")
-  }
-
-  implicit class Tuple2LinkEnhancements[A, B, C, D](val t: (Downstream[A, B], Upstream[C, D])) extends AnyVal {
-    implicit def toLinkedProxy(implicit proof: B => C): LinkedProxy[A, B, C, D] =
-      toLinkedProxy("<~>")
-
-    implicit def toLinkedProxy(name: String)(implicit proof: B => C): LinkedProxy[A, B, C, D] = {
-      val (down, up) = t
-      Proxy.linked(name, down, up, proof)
-    }
-
-    implicit def toProxy: Proxy[A, B, C, D] =
-      toProxy("<~>")
-
-    implicit def toProxy(name: String): Proxy[A, B, C, D] = {
-      val (down, up) = t
-      Proxy(name, down, up)
-    }
-  }
-
-  implicit class Tuple2FunctionEnhancements[A, B, C, D](val t: (A => B, C => D)) extends AnyVal {
-    implicit def toLinkedProxy(implicit proof: B => C, typeA: TypeTagTree[A], typeB: TypeTagTree[B], typeC: TypeTagTree[C], typeD: TypeTagTree[D]): LinkedProxy[A, B, C, D] =
-      toLinkedProxy("<~>")
-
-    implicit def toLinkedProxy(name: String)(implicit proof: B => C, typeA: TypeTagTree[A], typeB: TypeTagTree[B], typeC: TypeTagTree[C], typeD: TypeTagTree[D]): LinkedProxy[A, B, C, D] = {
-      val (down, up) = t
-      Proxy.linked(name, Link(down), Link(up), proof)
-    }
-
-    implicit def toProxy(implicit typeA: TypeTagTree[A], typeB: TypeTagTree[B], typeC: TypeTagTree[C], typeD: TypeTagTree[D]): Proxy[A, B, C, D] =
-      toProxy("<~>")
-
-    implicit def toProxy(name: String)(implicit typeA: TypeTagTree[A], typeB: TypeTagTree[B], typeC: TypeTagTree[C], typeD: TypeTagTree[D]): Proxy[A, B, C, D] = {
-      val (down, up) = t
-      Proxy(name, Link(down), Link(up))
-    }
-  }
-
-  implicit def tuple2LinkToProxy[A, B, C, D](t: (Downstream[A, B], Upstream[C, D]))(implicit typeA: TypeTagTree[A], typeB: TypeTagTree[B], typeC: TypeTagTree[C], typeD: TypeTagTree[D]) =
-    t.toProxy
-
-  implicit def tuple2FunctionToProxy[A, B, C, D](t: (A => B, C => D))(implicit typeA: TypeTagTree[A], typeB: TypeTagTree[B], typeC: TypeTagTree[C], typeD: TypeTagTree[D]) =
-    t.toProxy
-
-  implicit def proxyToLinkedProxy[A, B, C, D](proxy: Proxy[A, B, C, D])(implicit proofDownstreamCanMapToUpstream: B => C): LinkedProxy[A, B, C, D] =
-    proxy.linked(proofDownstreamCanMapToUpstream)
-
-  implicit def linkToLinkedProxy[A, D](link: Link[A, D]): LinkedProxy[A, A, D, D] =
-    link.toLinkedProxy
-
-  def typeTagTreeOf[T](implicit ttt: TypeTagTree[T]) =
-    TypeTagTree.typeTagTreeOf[T](ttt)
 
   implicit object FutureLiftOps extends LiftOps[ExecutionContext, Future] {
     import com.typesafe.scalalogging.Logger

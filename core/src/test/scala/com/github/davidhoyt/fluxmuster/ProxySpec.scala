@@ -2,6 +2,7 @@ package com.github.davidhoyt.fluxmuster
 
 class ProxySpec extends UnitSpec {
   import Chains._
+  import Implicits._
   import Links._
 
   behavior of Macros.simpleNameOf[Proxy.type]

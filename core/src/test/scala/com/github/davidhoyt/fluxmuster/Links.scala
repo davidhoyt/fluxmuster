@@ -3,6 +3,7 @@ package com.github.davidhoyt.fluxmuster
 object Links {
   import com.typesafe.scalalogging.Logger
   import org.slf4j.LoggerFactory
+  import Implicits._
 
   import scala.language.implicitConversions
 
