@@ -1,4 +1,4 @@
-package com.github.davidhoyt.fluxmuster.runner
+package com.github.davidhoyt.fluxmuster.lift
 
 import com.github.davidhoyt.fluxmuster._
 import com.netflix.hystrix.HystrixCommand
@@ -23,25 +23,25 @@ object Hystrix {
                                     (implicit val typeFallback: TypeTagTree[Any], val typeLiftedFallback: TypeTagTree[Future[Any]])
 
   def apply[A, D](name: String = defaultName, configuration: HystrixConfiguration)
-                 (implicit typeOut: TypeTagTree[Future[D]]): RunnerNeedsProxy[A, D, State, Future] =
-    RunnerNeedsProxy(name, State(None, configuration), HystrixRunnerOps, mapStateOnLift)
+                 (implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] =
+    PartialLift(name, State(None, configuration), HystrixLiftOps)
 
   def withFallback[A, D](name: String = defaultName, configuration: HystrixConfiguration)
                         (fallback: => D)
-                        (implicit typeOut: TypeTagTree[Future[D]]): RunnerNeedsProxy[A, D, State, Future] =
-    RunnerNeedsProxy(name, State(Some(() => fallback), configuration), HystrixRunnerOps, mapStateOnLift)
+                        (implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] =
+    PartialLift(name, State(Some(() => fallback), configuration), HystrixLiftOps)
 
-  private object HystrixRunnerOps extends RunnerOps[State, Future] {
+  private object HystrixLiftOps extends LiftOps[State, Future] {
     def point[A](given: => A): Future[A] =
-      FutureRunnerOps.point(given)
+      FutureLiftOps.point(given)
 
     def flatten[A](given: Future[Future[A]])(implicit state: State): Future[A] =
-      FutureRunnerOps.flatten(given)(state.configuration.context)
+      FutureLiftOps.flatten(given)(state.configuration.context)
 
     def map[A, B](given: Future[A])(fn: A => B)(implicit state: State): Future[B] =
-      FutureRunnerOps.map(given)(fn)(state.configuration.context)
+      FutureLiftOps.map(given)(fn)(state.configuration.context)
 
-    def liftRunner[A, D](linksChain: LinkChain, opsChain: ChainedRunnerOps[Future], runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] = {
+    def liftRunner[A, D](linksChain: LinkChain, opsChain: ChainedLiftOps[Future], runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] = {
 
 
 //      //typeOut = Future[D]
@@ -55,7 +55,7 @@ object Hystrix {
 //      construct[A, D](convertedState, convertedOps)(runner).apply(convertedState.fallback)
       //construct[A, D](state)(runner).apply(state.fallback)
 
-      val lifted = FutureRunnerOps.liftRunner(linksChain, opsChain, runner)(scala.concurrent.ExecutionContext.Implicits.global, typeIn, typeOut)
+      val lifted = FutureLiftOps.liftRunner(linksChain, opsChain, runner)(scala.concurrent.ExecutionContext.Implicits.global, typeIn, typeOut)
       lazy val fallback = opsChain.point(state.fallback.get.apply().asInstanceOf[D])
       (a: A) => {
         lifted(a) fallbackTo {
@@ -66,7 +66,7 @@ object Hystrix {
     }
   }
 
-  def mapStateOnLift(state: State, other: RunnerDataChain): State = {
+  def mapStateOnLift(state: State, other: LiftChain): State = {
     //val f = liftChainRunnerPoint(other, state)
 //    val foo = state.fallback.map(f => liftChainRunnerPoint(other, f()): Any)
 //    val liftedFallback = state.fallback.map(f => () => liftChainRunnerPoint(other, f()): Any)
@@ -84,7 +84,7 @@ object Hystrix {
     ???
   }
 
-  private def create[A, D](providedName: String, configuration: HystrixConfiguration, chained: Chain[A, D], fallback: => Option[() => D])(implicit typeOut: TypeTagTree[Future[D]]): RunnerNeedsProxy[A, D, State, Future] = {
+  private def create[A, D](providedName: String, configuration: HystrixConfiguration, chained: Chain[A, D], fallback: => Option[() => D])(implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] = {
 
     import scala.language.higherKinds
 

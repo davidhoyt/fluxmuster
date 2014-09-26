@@ -1,7 +1,6 @@
 package com.github.davidhoyt
 
 package object fluxmuster {
-  import scala.collection._
   import scala.concurrent.{ExecutionContext, Future}
   import scala.util.Try
   import Chains._
@@ -28,14 +27,11 @@ package object fluxmuster {
   type LinkAny =
     Chain[_, _]
 
-  type RunnerOpsAny =
-    RunnerOps[_ >: Any <: Any, Into forSome { type Into[_] }]
+  type LiftOpsAny =
+    LiftOps[_ >: Any <: Any, Into forSome { type Into[_] }]
 
-  type RunnerDataAny =
-    RunnerData[_, _, _, From forSome { type From[_] }, Into forSome { type Into[_] }]
-
-  type Runner2DataAny =
-    Runner2Data[_, From forSome { type From[_] }, Into forSome { type Into[_] }]
+  type LiftChainEntryAny =
+    LiftChainEntry[_, _, _, From forSome { type From[_] }, Into forSome { type Into[_] }]
 
   type LinkExistential =
     Link[_ >: Any <: Any, _ >: Any <: Any]
@@ -139,9 +135,6 @@ package object fluxmuster {
     }
   }
 
-  //implicit def proxyToRun[A, B, C, D](proxy: Proxy[A, B, C, D])(implicit proofDownstreamCanMapToUpstream: B => C): Run[A, D] =
-  //  proxyToLinkedProxy(proxy)
-
   implicit def proxyToLinkedProxy[A, B, C, D](proxy: Proxy[A, B, C, D])(implicit proofDownstreamCanMapToUpstream: B => C): LinkedProxy[A, B, C, D] =
     proxy.linked(proofDownstreamCanMapToUpstream)
 
@@ -151,15 +144,15 @@ package object fluxmuster {
   def typeTagTreeOf[T](implicit ttt: TypeTagTree[T]) =
     TypeTagTree.typeTagTreeOf[T](ttt)
 
-  implicit object FutureRunnerOps extends RunnerOps[ExecutionContext, Future] {
+  implicit object FutureLiftOps extends LiftOps[ExecutionContext, Future] {
     import com.typesafe.scalalogging.Logger
     import org.slf4j.LoggerFactory
     import scala.concurrent.Promise
     import scala.util.control.NonFatal
 
-    private val logger = Logger(LoggerFactory.getLogger(Macros.nameOf[FutureRunnerOps.type]))
+    private val logger = Logger(LoggerFactory.getLogger(Macros.nameOf[FutureLiftOps.type]))
 
-    def liftRunner[A, D](linksChain: LinkChain, opsChain: ChainedRunnerOps[Future], runner: A => D)(implicit ec: ExecutionContext, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] =
+    def liftRunner[A, D](linksChain: LinkChain, opsChain: ChainedLiftOps[Future], runner: A => D)(implicit ec: ExecutionContext, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] =
       (a: A) =>
         Future {
           runner(a)

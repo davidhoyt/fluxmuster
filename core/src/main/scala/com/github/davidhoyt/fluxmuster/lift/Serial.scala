@@ -1,22 +1,22 @@
-package com.github.davidhoyt.fluxmuster.runner
+package com.github.davidhoyt.fluxmuster.lift
 
 import com.github.davidhoyt.fluxmuster._
 
 import scala.util.Try
 
-object Serial extends RunnerFactory[Unit, Try] {
+object Serial extends LiftFactory[Unit, Try] {
   val defaultName =
     Macros.simpleNameOf[Serial.type]
 
   protected val ops =
-    new RunnerOps[Unit, Try] {
+    new LiftOps[Unit, Try] {
       import com.typesafe.scalalogging.Logger
       import org.slf4j.LoggerFactory
       import Chains._
 
       private val logger = Logger(LoggerFactory.getLogger(Macros.nameOf[Serial.type] + ".ops"))
 
-      def liftRunner[A, D](linksChain: LinkChain, opsChain: ChainedRunnerOps[Try], runner: A => D)(implicit state: Unit, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Try[D] =
+      def liftRunner[A, D](linksChain: LinkChain, opsChain: ChainedLiftOps[Try], runner: A => D)(implicit state: Unit, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Try[D] =
         (a: A) => Try(runner(a))
 
       def flatten[A](given: Try[Try[A]])(implicit state: Unit): Try[A] = {

@@ -44,7 +44,7 @@ extends Named { self =>
     Proxy("<~>", down, up)
   }
 
-  def |>[A >: DownstreamIn, D <: UpstreamOut, S, F[_]](other: RunnerNeedsProxy[A, D, S, F])(implicit proofDownstreamCanMapToUpstream: DownstreamOut => UpstreamIn, converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] =
+  def |>[A >: DownstreamIn, D <: UpstreamOut, S, F[_]](other: PartialLift[A, D, S, F])(implicit proofDownstreamCanMapToUpstream: DownstreamOut => UpstreamIn, converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Lift[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] =
     lift(other)
 
   /**
@@ -63,7 +63,7 @@ extends Named { self =>
    * @tparam F
    * @return
    */
-  def lift[A >: DownstreamIn, D <: UpstreamOut, S, F[_]](other: RunnerNeedsProxy[A, D, S, F])(implicit proofDownstreamCanMapToUpstream: DownstreamOut => UpstreamIn, converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] =
+  def lift[A >: DownstreamIn, D <: UpstreamOut, S, F[_]](other: PartialLift[A, D, S, F])(implicit proofDownstreamCanMapToUpstream: DownstreamOut => UpstreamIn, converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Lift[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] =
     linked(proofDownstreamCanMapToUpstream) lift other
 
   def map[A, B, C, D, T](fn: this.type => T)(implicit evidence: T <:< Proxy[A, B, C, D]): T =
@@ -72,7 +72,7 @@ extends Named { self =>
   /**
    * Calls the provided function with this [[Proxy]] instance allowing anything to be returned.
    * It's advisable that an instance of [[Run]] be the return value. Valid [[Run]] types include
-   * [[Link]], [[LinkedProxy]], and [[Runner]].
+   * [[Link]], [[LinkedProxy]], and [[Lift]].
    *
    * This is primarily used for proxy construction in a for comprehension.
    *
@@ -179,11 +179,11 @@ sealed trait LinkedProxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
   implicit val toLink: Link[DownstreamIn, UpstreamOut] =
     Link(name)(toFunction)(downstream.typeIn, upstream.typeOut)
 
-  def |>[A >: DownstreamIn, D <: UpstreamOut, S, F[_]](other: RunnerNeedsProxy[A, D, S, F])(implicit converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] =
+  def |>[A >: DownstreamIn, D <: UpstreamOut, S, F[_]](other: PartialLift[A, D, S, F])(implicit converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Lift[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] =
     lift(other)
 
-  def lift[A >: DownstreamIn, D <: UpstreamOut, S, F[_]](other: RunnerNeedsProxy[A, D, S, F])(implicit converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Runner[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] = {
-    val runner = Runner.withUnliftedProxy(other.name, this, newRunnerDataChain(), other.state, other.ops, rewireOnFlatMap = true, mapState = other.mapState)(converter, other.typeState, typeFofD, typeFofD)
+  def lift[A >: DownstreamIn, D <: UpstreamOut, S, F[_]](other: PartialLift[A, D, S, F])(implicit converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Lift[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] = {
+    val runner = Lift.proxy(other.name, this, newLiftChain(), other.state, other.ops, rewireOnFlatMap = true)(converter, other.typeState, typeFofD, typeFofD)
     runner
   }
 

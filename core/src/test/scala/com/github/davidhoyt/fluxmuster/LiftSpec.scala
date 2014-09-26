@@ -1,34 +1,28 @@
 package com.github.davidhoyt.fluxmuster
 
-object Foo {
-
-  trait T1
-
-}
-
-class RunnerSpec extends UnitSpec {
+class LiftSpec extends UnitSpec {
   import scala.concurrent.Await
   import scala.concurrent.duration._
   import scala.util.Success
   import Links._
   import Proxies._
-  import runner._
+  import lift._
 
   import scala.concurrent.ExecutionContext.Implicits.global
 
   import scala.language.implicitConversions
 
-  behavior of Macros.simpleNameOf[Runner.type]
+  behavior of Macros.simpleNameOf[Lift.type]
 
-  it should s"implicitly convert to ${Macros.simpleNameOf[LinkedProxy.type]} and lift into multiple runners" in {
-    val r1 = p1 |> Serial("s1") |> Serial() |> Async("a1")
-    val result = r1.run("0")
-    r1.runnerChain.map(_.name) should be(Vector("s1", Serial.defaultName, "a1"))
+  it should s"implicitly convert to ${Macros.simpleNameOf[LinkedProxy.type]} and lift into multiple lifts" in {
+    val l1 = p1 |> Serial("s1") |> Serial() |> Async("a1")
+    val result = l1.run("0")
+    l1.liftChain.map(_.name) should be(Vector("s1", Serial.defaultName, "a1"))
     Await.result(result, 10.seconds) should be("3")
   }
 
   it should s"allow composition without proof unless needed" in {
-    val r1 =
+    val l1 =
       for {
         p1 <- Proxy("t1/t2.1", Link.identity[T1], Link.identity[T2])
         p2 <- Proxy("t1/t2.2", Link.identity[T1], Link.identity[T2])
@@ -37,26 +31,27 @@ class RunnerSpec extends UnitSpec {
 
     ////Following should fail to compile because an implicit T1 => T2 is
     ////not available.
-    //val r2 =
+    //val l2 =
     //  for {
-    //    p <- r1 |> Serial()
+    //    p <- l1 |> Serial()
     //  } yield p
 
     //Following compiles because an implicit has been provided in scope
     //to map from T1 to T2. Running it, though, should throw an exception.
-    val r3 = {
-      implicit def t1ToT2(t1: T1): T2 = ???
+    val l3 = {
+      implicit def t1ToT2(t1: T1): T2 =
+        ???
 
       for {
-        p <- r1 lift Serial()
+        p <- l1 lift Serial()
       } yield p
     }
 
-    r3(null).isSuccess should be (false)
+    l3(null).isSuccess should be (false) //because ??? throws an exception
   }
 
   it should s"compose using symbolic operators" in {
-    val r1 =
+    val l1 =
       for {
         pp1 <- p1
         pp2 <- p2
@@ -66,12 +61,12 @@ class RunnerSpec extends UnitSpec {
         _ <- p1 <~> p2 <~> p3 |> Async()     //ignore
       } yield proxy |> Serial("s1") |> Async("a1")
 
-    r1.runnerChain.map(_.name) should be(Vector("s1", "a1"))
-    Await.result(r1.run("0"), 10.seconds) should be("33")
+    l1.liftChain.map(_.name) should be(Vector("s1", "a1"))
+    Await.result(l1.run("0"), 10.seconds) should be("33")
   }
 
-  it should s"compose cleanly without syntactic sugar with multiple runners" in {
-    val r1 =
+  it should s"compose cleanly without syntactic sugar with multiple lifts" in {
+    val l1 =
       p1 flatMap { a =>
         p2 flatMap { b =>
           p3 flatMap { c =>
@@ -79,7 +74,7 @@ class RunnerSpec extends UnitSpec {
               Serial("s2", d) flatMap { e =>
                 Async("a3", e) flatMap { f =>
                   Async("a4", f) map { g =>
-                    //println(f.runnerChain.map(_.name))
+                    //println(f.liftChain.map(_.name))
                     g
                   }
                 }
@@ -89,12 +84,12 @@ class RunnerSpec extends UnitSpec {
         }
       }
 
-    Await.result(r1.run("0"), 10.seconds) should be("33")
-    r1.runnerChain.map(_.name) should be(Vector("s1", "s2", "a3", "a4"))
+    Await.result(l1.run("0"), 10.seconds) should be("33")
+    l1.liftChain.map(_.name) should be(Vector("s1", "s2", "a3", "a4"))
   }
 
   it should s"compose with for comprehensions and ignore filters" in {
-    val singleRunnerDoNotUseAllProxies =
+    val singleLiftDoNotUseAllProxies =
       for {
         pp1 <- p1 if false
         pp2 <- p2 if true
@@ -102,36 +97,36 @@ class RunnerSpec extends UnitSpec {
         s1 <- Serial("s1", pp1 <~> pp2)
       } yield s1
 
-    val result1 = singleRunnerDoNotUseAllProxies.run("3")
+    val result1 = singleLiftDoNotUseAllProxies.run("3")
     result1 should be (Success("25"))
-    singleRunnerDoNotUseAllProxies.runnerChain.map(_.name) should be (Vector("s1"))
+    singleLiftDoNotUseAllProxies.liftChain.map(_.name) should be (Vector("s1"))
 
-    val doubleRunner =
-      singleRunnerDoNotUseAllProxies lift Serial("s2")
-    doubleRunner.runnerChain.map(_.name) should be (Vector("s1", "s2"))
+    val doubleLift =
+      singleLiftDoNotUseAllProxies lift Serial("s2")
+    doubleLift.liftChain.map(_.name) should be (Vector("s1", "s2"))
 
-    val doubleRunner2 =
-      singleRunnerDoNotUseAllProxies |> Async("a1")
-    doubleRunner2.runnerChain.map(_.name) should be (Vector("s1", "a1"))
+    val doubleLift2 =
+      singleLiftDoNotUseAllProxies |> Async("a1")
+    doubleLift2.liftChain.map(_.name) should be (Vector("s1", "a1"))
 
-    val doubleRunner3 =
-      doubleRunner2 |> Async("a2") |> Async("a3") |> Async("a4")
-    doubleRunner3.runnerChain.map(_.name) should be (Vector("s1", "a1", "a2", "a3", "a4"))
-    Await.result(doubleRunner3.run("3"), 10.seconds) should be ("25")
+    val doubleLift3 =
+      doubleLift2 |> Async("a2") |> Async("a3") |> Async("a4")
+    doubleLift3.liftChain.map(_.name) should be (Vector("s1", "a1", "a2", "a3", "a4"))
+    Await.result(doubleLift3.run("3"), 10.seconds) should be ("25")
 
-    val simpleRunnerMapWithLink =
+    val simpleLiftMapWithLink =
       for {
         r1 <- Serial("s1", linkS2L ~> linkInc2Mult1)
       } yield r1
 
-    val simpleRunnerFlatMapDesugared =
+    val simpleLiftFlatMapDesugared =
       Serial("s1", linkS2L ~> linkInc2Mult1) flatMap { a =>
         Serial("s2", a) map { b =>
           b
         }
       }
 
-    val simpleRunnerFlatMap =
+    val simpleLiftFlatMap =
       for {
         r1 <- Serial("r1", linkS2L ~> linkInc2Mult1)
         r2 <- Serial("r2", r1)

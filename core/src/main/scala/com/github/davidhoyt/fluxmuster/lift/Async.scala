@@ -1,9 +1,9 @@
-package com.github.davidhoyt.fluxmuster.runner
+package com.github.davidhoyt.fluxmuster.lift
 
 import com.github.davidhoyt.fluxmuster._
 import scala.concurrent.{ExecutionContext, Future}
 
-object Async extends RunnerFactory[ExecutionContext, Future] {
+object Async extends LiftFactory[ExecutionContext, Future] {
 
   import scala.language.higherKinds
 
@@ -11,5 +11,5 @@ object Async extends RunnerFactory[ExecutionContext, Future] {
     Macros.simpleNameOf[Async.type]
 
   protected val ops =
-    FutureRunnerOps
+    FutureLiftOps
 }
