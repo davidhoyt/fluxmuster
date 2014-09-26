@@ -12,24 +12,20 @@ object Hystrix {
   import scala.concurrent.{Promise, Future}
   import Chains._
 
-  //B = return value or fallback
-  //A = optional value to call the hystrix command with
-  type HystCommandNeedsFallback[-A, B] = Option[() => Any] => A => Future[B]
-  type HystCommand[-A, +B] = A => Future[B]
-
-  val defaultName = Macros.simpleNameOf[Hystrix.type]
+  val defaultName =
+    Macros.simpleNameOf[Hystrix.type]
 
   case class State private[Hystrix] (fallback: Option[() => Any], configuration: HystrixConfiguration)
                                     (implicit val typeFallback: TypeTagTree[Any], val typeLiftedFallback: TypeTagTree[Future[Any]])
 
-  def apply[A, D](name: String = defaultName, configuration: HystrixConfiguration)
+  def apply[A, D](name: String = defaultName, config: HystrixConfiguration)
                  (implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] =
-    PartialLift(name, State(None, configuration), HystrixLiftOps)
+    PartialLift(name, State(None, config), HystrixLiftOps)
 
-  def withFallback[A, D](name: String = defaultName, configuration: HystrixConfiguration)
+  def withFallback[A, D](name: String = defaultName, config: HystrixConfiguration)
                         (fallback: => D)
                         (implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] =
-    PartialLift(name, State(Some(() => fallback), configuration), HystrixLiftOps)
+    PartialLift(name, State(Some(() => fallback), config), HystrixLiftOps)
 
   private object HystrixLiftOps extends LiftOps[State, Future] {
     def point[A](given: => A): Future[A] =
@@ -42,46 +38,71 @@ object Hystrix {
       FutureLiftOps.map(given)(fn)(state.configuration.context)
 
     def liftRunner[A, D](linksChain: LinkChain, opsChain: ChainedLiftOps[Future], runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] = {
+      //The fallback must also be lifted up the chain so that it can be applied
+      //to the resulting lifted value if necessary.
+      lazy val fallbackTo =
+        state.fallback
+          .map(fn => opsChain.prepoint(fn()))
+          .map(_.asInstanceOf[D])
 
+      import state._
+      import state.configuration._
+      import rx.functions.Action1
+      import rx.lang.scala.JavaConversions.toScalaObservable
 
-//      //typeOut = Future[D]
-//      //state.typeLiftedFallback = Future[T]
-//      val unliftedTypeArgumentOut = typeOut.tpe
-//      val unliftedTypeArgumentFallback = state.typeLiftedFallback.typeArguments.head.tpe
-//      val convertedState = state.asInstanceOf[State[D]]
-//      val convertedOps = this.asInstanceOf[HystrixOps[D]]
-//
-//      require(unliftedTypeArgumentFallback <:< unliftedTypeArgumentOut, s"$unliftedTypeArgumentOut is not a subtype of $unliftedTypeArgumentFallback")
-//      construct[A, D](convertedState, convertedOps)(runner).apply(convertedState.fallback)
-      //construct[A, D](state)(runner).apply(state.fallback)
+      lazy val setter =
+        configuration.builder(
+          HystrixCommand.Setter
+            .withGroupKey(HystrixCommandGroupKey.Factory.asKey(configuration.group))
+            .andCommandKey(HystrixCommandKey.Factory.asKey(configuration.command))
+            .andCommandPropertiesDefaults(
+              HystrixCommandProperties.Setter()
+                .withExecutionIsolationThreadTimeoutInMilliseconds(configuration.timeout.toMillis.toInt)
+            )
+        )
 
-      val lifted = FutureLiftOps.liftRunner(linksChain, opsChain, runner)(scala.concurrent.ExecutionContext.Implicits.global, typeIn, typeOut)
-      lazy val fallback = opsChain.point(state.fallback.get.apply().asInstanceOf[D])
-      (a: A) => {
-        lifted(a) fallbackTo {
-          fallback
+      (param: A) => {
+        val cmd =
+          if (fallbackTo.isDefined) {
+            new HystrixCommand[D](setter) {
+              override def run() =
+                runner(param)
+
+              override def getFallback =
+                fallbackTo.get
+            }
+          } else {
+            new HystrixCommand[D](setter) {
+              override def run() =
+                runner(param)
+            }
+          }
+
+        //For performance reasons do not capture values in a closure,
+        //instead explicitly provide them as arguments.
+
+        class onNext(promise: Promise[D]) extends Action1[D] {
+          def call(d: D): Unit =
+            promise.success(d)
         }
+
+        class onError(promise: Promise[D]) extends Action1[Throwable] {
+          def call(t: Throwable): Unit =
+            promise.failure(t)
+        }
+
+        val p =
+          Promise[D]()
+
+        //No need to convert to a Scala Observable.
+        val obs = cmd.observe()
+          .first()
+          .forEach(new onNext(p), new onError(p))
+
+        p.future
       }
 
     }
-  }
-
-  def mapStateOnLift(state: State, other: LiftChain): State = {
-    //val f = liftChainRunnerPoint(other, state)
-//    val foo = state.fallback.map(f => liftChainRunnerPoint(other, f()): Any)
-//    val liftedFallback = state.fallback.map(f => () => liftChainRunnerPoint(other, f()): Any)
-    //The fallback must also be lifted up the chain so that it can be applied
-    //to the resulting lifted value if necessary.
-//        val liftedFallback = other.foldLeft(state.fallback) {
-//          case (fall, part) =>
-//            fall map (f => () => )
-//        }
-
-    //Create a new state where the fallback has been properly lifted into
-    //context and which should be used for runs.
-//    val newState = state.copy(fallback = liftedFallback)
-//    newState
-    ???
   }
 
   private def create[A, D](providedName: String, configuration: HystrixConfiguration, chained: Chain[A, D], fallback: => Option[() => D])(implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] = {

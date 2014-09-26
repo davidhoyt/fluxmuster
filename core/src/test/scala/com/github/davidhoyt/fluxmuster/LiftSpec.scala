@@ -70,16 +70,25 @@ class LiftSpec extends UnitSpec {
       p1 flatMap { a =>
         p2 flatMap { b =>
           p3 flatMap { c =>
-            Serial("s1", a combine b combine c) flatMap { d =>
-              Serial("s2", d) flatMap { e =>
-                Async("a3", e) flatMap { f =>
-                  Async("a4", f) map { g =>
-                    //println(f.liftChain.map(_.name))
+            a combine b combine c lift Serial("s1") flatMap { d =>
+              d lift Serial("s2") flatMap { e =>
+                e |> Async("a3") flatMap { f =>
+                  f |> Async("a4") map { g =>
                     g
                   }
                 }
               }
             }
+            //Serial("s1", a combine b combine c) flatMap { d =>
+            //  Serial("s2", d) flatMap { e =>
+            //    Async("a3", e) flatMap { f =>
+            //      Async("a4", f) map { g =>
+            //        //println(f.liftChain.map(_.name))
+            //        g
+            //      }
+            //    }
+            //  }
+            //}
           }
         }
       }
@@ -94,7 +103,7 @@ class LiftSpec extends UnitSpec {
         pp1 <- p1 if false
         pp2 <- p2 if true
         pp3 <- p3 if false
-        s1 <- Serial("s1", pp1 <~> pp2)
+        s1 <- pp1 <~> pp2 |> Serial("s1")
       } yield s1
 
     val result1 = singleLiftDoNotUseAllProxies.run("3")
@@ -116,29 +125,29 @@ class LiftSpec extends UnitSpec {
 
     val simpleLiftMapWithLink =
       for {
-        r1 <- Serial("s1", linkS2L ~> linkInc2Mult1)
+        r1 <- linkS2L ~> linkInc2Mult1 lift Serial("s1")
       } yield r1
 
     val simpleLiftFlatMapDesugared =
-      Serial("s1", linkS2L ~> linkInc2Mult1) flatMap { a =>
-        Serial("s2", a) map { b =>
+      linkS2L ~> linkInc2Mult1 lift Serial("s1") flatMap { a =>
+        a lift Serial("s2") map { b =>
           b
         }
       }
 
     val simpleLiftFlatMap =
       for {
-        r1 <- Serial("r1", linkS2L ~> linkInc2Mult1)
-        r2 <- Serial("r2", r1)
+        r1 <- linkS2L ~> linkInc2Mult1 |> Serial("r1")
+        r2 <- r1 |> Serial("r2")
       } yield r2
   }
 
   it should s"function properly with Hystrix" in {
     val foo =
       for {
-        s <- p1 <~> p2 <~> p3 <~> Proxy("a", (l: Long) => { Thread.sleep(1000L); l }, identity[Int] _)
-        f <- s |> Hystrix.withFallback(configuration = HystrixConfiguration())("boo!")
+        s <- p1 <~> p2 <~> p3 <~> (((l: Long) => { /*Thread.sleep(3000L);*/ l }, identity[Int] _))
+        f <- s |> Serial() |> Hystrix.withFallback(config = HystrixConfiguration(timeout = 1.second))("boo!") |> Async()
       } yield f
-    Await.result(foo.run("0"), 2.seconds) should be ("33")
+    Await.result(foo.run("0"), 10.seconds) should be ("33")
   }
 }

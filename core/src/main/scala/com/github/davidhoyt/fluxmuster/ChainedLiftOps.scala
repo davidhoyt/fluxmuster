@@ -14,6 +14,13 @@ case class ChainedLiftOps[Into[_]](private val opsChain: LiftOpsChain) {
     f.asInstanceOf[Into[A]]
   }
 
+  /** Lifts the provided `value` almost into context by calling `point()` in all lift ops except the current (last) one. */
+  def prepoint(value: Any): Any =
+    opsChain.dropRight(1).foldLeft(value: Any) {
+      case (a, ops) =>
+        ops.point(a)
+    }
+
   def :+(addl: LiftOpsAny): ChainedLiftOps[Into] =
     copy(opsChain = opsChain :+ addl)
 }
