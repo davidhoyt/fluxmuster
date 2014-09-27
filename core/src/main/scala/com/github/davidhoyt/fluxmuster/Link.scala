@@ -28,6 +28,8 @@ sealed trait Link[In, Out]
 
   val sideEffects: ChainSideEffects[Out]
 
+  val isIdentity = false
+
   protected def runLink[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B
 
   override def apply[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B = {
@@ -101,6 +103,12 @@ sealed trait Link[In, Out]
     andThen(Link(other)(tOtherIn, tOtherOut))(thisOutToOtherIn)
 
   def andThen[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Link[In, OtherOut] =
+    //The addition to the linkChain based on types is not sound since you could have a function
+    //that's provided that is not the identity function but yields a different value of the same
+    //type. This would filter that out. In practice it would be very rare for this to occur and
+    //if it becomes a problem, it will need to always be added to the chain. Unfortunately this
+    //would proliferate a lot of identity functions for the very few cases where it could be useful.
+    //In those cases it's suggested you simply compose a new link using the function in question.
     new Link.Build[In, OtherOut]("~>", Link.this.linkChain ++ (if (Link.this.typeOut != other.typeIn) Seq(Link(thisOutToOtherIn)(Link.this.typeOut, other.typeIn)) else Seq()), other.linkChain, Link.linkCombined)(Link.this.typeIn, other.typeOut) {
       protected def runLink[A, B](a: A)(implicit aToIn: A => In, outToB: OtherOut => B): B =
         other.apply(Link.this.apply(aToIn(a))(identity, thisOutToOtherIn))
@@ -122,6 +130,12 @@ sealed trait Link[In, Out]
     compose(Link(other)(tOtherIn, tOtherOut))(otherOutToThisIn)
 
   def compose[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Link[OtherIn, Out] =
+    //The addition to the linkChain based on types is not sound since you could have a function
+    //that's provided that is not the identity function but yields a different value of the same
+    //type. This would filter that out. In practice it would be very rare for this to occur and
+    //if it becomes a problem, it will need to always be added to the chain. Unfortunately this
+    //would proliferate a lot of identity functions for the very few cases where it could be useful.
+    //In those cases it's suggested you simply compose a new link using the function in question.
     new Link.Build[OtherIn, Out]("<~", other.linkChain ++ (if (other.typeOut != Link.this.typeIn) Seq(Link(otherOutToThisIn)(other.typeOut, Link.this.typeIn)) else Seq()), Link.this.linkChain, Link.linkCombined)(other.typeIn, Link.this.typeOut) {
       protected def runLink[A, B](a: A)(implicit aToIn: A => OtherIn, outToB: Out => B): B =
         Link.this.apply(other.apply(aToIn(a))(identity, otherOutToThisIn))
@@ -133,7 +147,7 @@ sealed trait Link[In, Out]
 
   override def equals(other: Any): Boolean =
     other match {
-      case ref: Link[_, _] if typeIn == ref.typeIn && typeOut == ref.typeOut =>
+      case ref: Link[_, _] if isIdentity && ref.isIdentity && typeIn == ref.typeIn && typeOut == ref.typeOut =>
         true
       case ref: AnyRef =>
         ref eq Link.this
@@ -146,7 +160,7 @@ object Link {
   import scala.collection.immutable
   import Chains._
 
-  private[fluxmuster] abstract case class Build[In, Out](name: String, mine: LinkChain, otherLink: LinkChain, chaining: FnChainLink, override val asShortString: String = null, sideEffects: ChainSideEffects[Out] = SideEffectsChainEmpty[Out])(implicit val typeIn: TypeTagTree[In], val typeOut: TypeTagTree[Out]) extends Link[In, Out] with Named {
+  private[fluxmuster] abstract case class Build[In, Out](name: String, mine: LinkChain, otherLink: LinkChain, chaining: FnChainLink, override val asShortString: String = null, sideEffects: ChainSideEffects[Out] = SideEffectsChainEmpty[Out], override val isIdentity: Boolean = false)(implicit val typeIn: TypeTagTree[In], val typeOut: TypeTagTree[Out]) extends Link[In, Out] with Named {
     lazy val linkChain =
       chainTogether(this, mine, otherLink)
 
@@ -161,6 +175,7 @@ object Link {
       case (seq, _) =>
         seq
     }
+    //.filterNot(_.isIdentity)
 
   private[fluxmuster] def linkProvided(instance: LinkAny, mine: LinkChain, other: LinkChain): LinkChain =
     if ((mine eq null) || mine.isEmpty)
@@ -183,12 +198,14 @@ object Link {
   def create[In, Out](name: String, mine: LinkChain, other: LinkChain, chaining: FnChainLink)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
     create[In, Out](name, mine, other, chaining, SideEffectsChainEmpty[Out])(fn)(typeIn, typeOut)
 
-  def create[In, Out](name: String, mine: LinkChain, other: LinkChain, chaining: FnChainLink, sideEffects: ChainSideEffects[Out])(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
-    new Build[In, Out](name, mine, other, chaining, s"${typeIn.toShortString} => ${typeOut.toShortString}", sideEffects)(typeIn, typeOut) {
+  def create[In, Out](name: String, mine: LinkChain, other: LinkChain, chaining: FnChainLink, sideEffects: ChainSideEffects[Out], identity: Boolean = false)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
+    new Build[In, Out](name, mine, other, chaining, s"${typeIn.toShortString} => ${typeOut.toShortString}", sideEffects, identity)(typeIn, typeOut) {
       protected def runLink[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B =
         outToB(fn(aToIn(a)))
     }
 
-  def identity[A](implicit typeA: TypeTagTree[A]): Link[A, A] =
-    Link(Predef.identity[A]_)(typeA, typeA)
+  def identity[A](implicit typeA: TypeTagTree[A]): Link[A, A] = {
+    val fn = Predef.identity[A] _
+    create[A, A](fn.toString(), LinkChainEmpty, LinkChainEmpty, linkProvided _, SideEffectsChainEmpty[A], identity = true)(fn)(typeA, typeA)
+  }
 }

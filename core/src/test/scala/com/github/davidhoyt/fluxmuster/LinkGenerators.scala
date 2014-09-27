@@ -4,7 +4,6 @@ import scala.util.Random
 
 object LinkGenerators {
   import org.scalacheck.{Arbitrary, Gen}
-  import scala.reflect.runtime.universe._
 
   import scala.language.existentials
 

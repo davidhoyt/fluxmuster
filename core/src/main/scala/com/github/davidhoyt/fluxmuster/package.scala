@@ -25,7 +25,7 @@ package object fluxmuster {
   implicit val EmptyUnit: Unit = ()
 
   type LinkAny =
-    Chain[_, _]
+    Link[_, _]
 
   type ProxyAny =
     Proxy[_, _, _, _]
