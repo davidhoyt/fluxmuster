@@ -5,7 +5,7 @@ import com.netflix.hystrix.HystrixCommand
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
-case class HystrixConfig(group: String = "default", command: String = "default", implicit val timeout: Duration = 1.second, builder: HystrixCommand.Setter => HystrixCommand.Setter = identity)(implicit val context: ExecutionContext)
+case class HystrixConfig(group: String = "default", command: String = "default", builder: HystrixCommand.Setter => HystrixCommand.Setter = identity)(implicit val timeout: FiniteDuration = 1.second, val context: ExecutionContext)
 
 object Hystrix {
   import com.netflix.hystrix.{HystrixCommandGroupKey, HystrixCommandKey, HystrixCommandProperties}
@@ -18,11 +18,20 @@ object Hystrix {
   case class State private[Hystrix] (fallback: Option[() => Any], config: HystrixConfig)
                                     (implicit val typeFallback: TypeTagTree[Any], val typeLiftedFallback: TypeTagTree[Future[Any]])
 
-  def apply[A, D](name: String = defaultName, config: HystrixConfig)
+  def apply[A, D](config: HystrixConfig)
+                 (implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] =
+    apply(defaultName, config)
+
+  def apply[A, D](name: String, config: HystrixConfig)
                  (implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] =
     PartialLift(name, State(None, config), HystrixLiftOps)
 
-  def withFallback[A, D](name: String = defaultName, config: HystrixConfig)
+  def withFallback[A, D](config: HystrixConfig)
+                        (fallback: => D)
+                        (implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] =
+    withFallback(defaultName, config)(fallback)
+
+  def withFallback[A, D](name: String, config: HystrixConfig)
                         (fallback: => D)
                         (implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] =
     PartialLift(name, State(Some(() => fallback), config), HystrixLiftOps)
@@ -102,28 +111,5 @@ object Hystrix {
       }
 
     }
-  }
-
-  private def create[A, D](providedName: String, configuration: HystrixConfig, chained: Chain[A, D], fallback: => Option[() => D])(implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] = {
-
-    import scala.language.higherKinds
-
-    require(configuration.timeout.isFinite(), s"Hystrix timeout must be a finite amount")
-
-//    def mapStateOnLift(state: State, other: ChainRunner): State = {
-//      //The fallback must also be lifted up the chain so that it can be applied
-//      //to the resulting lifted value if necessary.
-//      val liftedFallback = other.foldLeft(state.fallback) {
-//        case (fall, part) =>
-//          fall map (f => () => part.ops.point(f())(part.ops.unsafeCastAsState(part.state)))
-//      }
-//
-//      //Create a new state where the fallback has been properly lifted into
-//      //context and which should be used for runs.
-//      val newState = state.copy(fallback = liftedFallback)
-//      newState
-//    }
-
-    ???
   }
 }

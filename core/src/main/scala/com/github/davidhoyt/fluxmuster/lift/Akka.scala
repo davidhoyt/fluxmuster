@@ -18,10 +18,16 @@ object Akka {
   val defaultName =
     Macros.simpleNameOf[Akka.type]
 
-  def apply[A, D](name: String = defaultName, config: AkkaConfig): PartialLift[A, D, AkkaConfig, Future] =
+  def apply[A, D](config: AkkaConfig): PartialLift[A, D, AkkaConfig, Future] =
+    apply(defaultName, config)
+
+  def apply[A, D](name: String, config: AkkaConfig): PartialLift[A, D, AkkaConfig, Future] =
     PartialLift(name, config, AkkaSerialOps)
 
-  def par[A, D](name: String = defaultName, config: AkkaConfig): PartialLift[A, D, AkkaConfig, Future] =
+  def par[A, D](config: AkkaConfig): PartialLift[A, D, AkkaConfig, Future] =
+    par(defaultName, config)
+
+  def par[A, D](name: String, config: AkkaConfig): PartialLift[A, D, AkkaConfig, Future] =
     PartialLift(name, config, AkkaParallelOps)
 
   object AkkaSerialOps extends LiftOps[AkkaConfig, Future] {
