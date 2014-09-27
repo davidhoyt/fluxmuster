@@ -1,5 +1,7 @@
 package com.github.davidhoyt.fluxmuster
 
+import scala.annotation.tailrec
+
 private[fluxmuster] object Utils {
   /**
    * Given a sequence it produces another sequence of tuples that each contain the
@@ -18,7 +20,7 @@ private[fluxmuster] object Utils {
    * @return A new sequence after applying `fn` to the previous, current, and next elements
    */
   def prevCurrentNext[T, U](xs: Seq[T])(fn: PartialFunction[(Option[T], T, Option[T]), U]): Seq[U] = {
-    def step(prev: Option[T], xs: Seq[T], build: Seq[U]): Seq[U] = {
+    @tailrec def step(prev: Option[T], xs: Seq[T], build: Seq[U]): Seq[U] = {
       val (current, next) = xs match {
         case x +: y +: _ => (Some(x), Some(y))
         case x +: _ => (Some(x), None)
