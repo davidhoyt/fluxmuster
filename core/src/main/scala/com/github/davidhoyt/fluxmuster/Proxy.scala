@@ -164,8 +164,8 @@ sealed trait LinkedProxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
 
   implicit val linkDownstreamToUpstream: Link[DownstreamOut, UpstreamIn]
 
-  implicit val chain: LinkChain =
-    downstream.chain ++ (linkDownstreamToUpstream +: upstream.chain)
+  implicit val linkChain: LinkChain =
+    downstream.linkChain ++ (linkDownstreamToUpstream +: upstream.linkChain)
 
   def run(in: DownstreamIn): UpstreamOut =
     runProxy(in)(linkDownstreamToUpstream.toFunction, identity)
@@ -183,7 +183,7 @@ sealed trait LinkedProxy[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut]
     lift(other)
 
   def lift[A >: DownstreamIn, D <: UpstreamOut, S, F[_]](other: PartialLift[A, D, S, F])(implicit converter: F -> F, typeFofD: TypeTagTree[F[UpstreamOut]]): Lift[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, S, F, F] = {
-    val runner = Lift.proxy(other.name, this, newLiftChain(), other.state, other.ops, rewireOnFlatMap = true)(converter, other.typeState, typeFofD, typeFofD)
+    val runner = Lift.proxy(other.name, this, LiftChainEmpty, other.state, other.ops, rewireOnFlatMap = true)(converter, other.typeState, typeFofD, typeFofD)
     runner
   }
 

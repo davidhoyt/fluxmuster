@@ -10,7 +10,7 @@ object LinkSpecification extends Properties(Macros.simpleNameOf[Link.type]) {
     Prop.forAll { (genLink: GeneratedLink) =>
       val GeneratedLink(default, link) = genLink
 
-      val validChainSize   = link.chain.size > 0
+      val validChainSize   = link.linkChain.size > 0
       val resultFromApply  = link(default)
       val resultFromRun    = link.run(default)
       val resultFromRunAny = link.runAny(default)

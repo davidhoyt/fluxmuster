@@ -16,7 +16,7 @@ object Serial extends LiftFactory[Unit, Try] {
 
       private val logger = Logger(LoggerFactory.getLogger(Macros.nameOf[Serial.type] + ".ops"))
 
-      def liftRunner[A, D](linksChain: LinkChain, opsChain: ChainedLiftOps[Try], runner: A => D)(implicit state: Unit, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Try[D] =
+      def liftRunner[A, D](linkChain: LinkChain, opsChain: ChainedLiftOps[Try], runner: A => D)(implicit state: Unit, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Try[D] =
         (a: A) => Try(runner(a))
 
       def flatten[A](given: Try[Try[A]])(implicit state: Unit): Try[A] = {

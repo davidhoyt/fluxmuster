@@ -27,6 +27,9 @@ package object fluxmuster {
   type LinkAny =
     Chain[_, _]
 
+  type ProxyAny =
+    Proxy[_, _, _, _]
+
   type LiftOpsAny =
     LiftOps[_ >: Any <: Any, Into forSome { type Into[_] }]
 
@@ -70,12 +73,18 @@ package object fluxmuster {
       toLink.toLinkedProxy
   }
 
-  implicit class ChainLinkEnhancements(val chainLink: LinkChain) extends AnyVal {
+  implicit class LinkChainEnhancements(val linkChain: LinkChain) extends AnyVal {
     def asDefaultString =
-      chainLink.map(_.asDefaultString).mkString(", ")
+      linkChain.map(_.asDefaultString).mkString(", ")
 
     def asShortString =
-      chainLink.map(_.asShortString).mkString(", ")
+      linkChain.map(_.asShortString).mkString(", ")
+
+    def runLinkChainAny(in: Any): Any =
+      linkChain.foldLeft(in) {
+        case (soFar, next) =>
+          next.runAny(soFar)
+      }
   }
 
   implicit object IdentityConverter {
@@ -135,7 +144,7 @@ package object fluxmuster {
 
     private val logger = Logger(LoggerFactory.getLogger(Macros.nameOf[FutureLiftOps.type]))
 
-    def liftRunner[A, D](linksChain: LinkChain, opsChain: ChainedLiftOps[Future], runner: A => D)(implicit ec: ExecutionContext, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] =
+    def liftRunner[A, D](linkChain: LinkChain, opsChain: ChainedLiftOps[Future], runner: A => D)(implicit ec: ExecutionContext, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] =
       (a: A) =>
         Future {
           runner(a)

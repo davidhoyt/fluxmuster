@@ -5,7 +5,7 @@ import com.netflix.hystrix.HystrixCommand
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
-case class HystrixConfiguration(group: String = "default", command: String = "default", implicit val timeout: Duration = 1.second, builder: HystrixCommand.Setter => HystrixCommand.Setter = identity)(implicit val context: ExecutionContext)
+case class HystrixConfig(group: String = "default", command: String = "default", implicit val timeout: Duration = 1.second, builder: HystrixCommand.Setter => HystrixCommand.Setter = identity)(implicit val context: ExecutionContext)
 
 object Hystrix {
   import com.netflix.hystrix.{HystrixCommandGroupKey, HystrixCommandKey, HystrixCommandProperties}
@@ -15,14 +15,14 @@ object Hystrix {
   val defaultName =
     Macros.simpleNameOf[Hystrix.type]
 
-  case class State private[Hystrix] (fallback: Option[() => Any], configuration: HystrixConfiguration)
+  case class State private[Hystrix] (fallback: Option[() => Any], config: HystrixConfig)
                                     (implicit val typeFallback: TypeTagTree[Any], val typeLiftedFallback: TypeTagTree[Future[Any]])
 
-  def apply[A, D](name: String = defaultName, config: HystrixConfiguration)
+  def apply[A, D](name: String = defaultName, config: HystrixConfig)
                  (implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] =
     PartialLift(name, State(None, config), HystrixLiftOps)
 
-  def withFallback[A, D](name: String = defaultName, config: HystrixConfiguration)
+  def withFallback[A, D](name: String = defaultName, config: HystrixConfig)
                         (fallback: => D)
                         (implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] =
     PartialLift(name, State(Some(() => fallback), config), HystrixLiftOps)
@@ -32,10 +32,10 @@ object Hystrix {
       FutureLiftOps.point(given)
 
     def flatten[A](given: Future[Future[A]])(implicit state: State): Future[A] =
-      FutureLiftOps.flatten(given)(state.configuration.context)
+      FutureLiftOps.flatten(given)(state.config.context)
 
     def map[A, B](given: Future[A])(fn: A => B)(implicit state: State): Future[B] =
-      FutureLiftOps.map(given)(fn)(state.configuration.context)
+      FutureLiftOps.map(given)(fn)(state.config.context)
 
     def liftRunner[A, D](linksChain: LinkChain, opsChain: ChainedLiftOps[Future], runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Future[D] = {
       //The fallback must also be lifted up the chain so that it can be applied
@@ -46,18 +46,17 @@ object Hystrix {
           .map(_.asInstanceOf[D])
 
       import state._
-      import state.configuration._
+      import state.config._
       import rx.functions.Action1
-      import rx.lang.scala.JavaConversions.toScalaObservable
 
       lazy val setter =
-        configuration.builder(
+        config.builder(
           HystrixCommand.Setter
-            .withGroupKey(HystrixCommandGroupKey.Factory.asKey(configuration.group))
-            .andCommandKey(HystrixCommandKey.Factory.asKey(configuration.command))
+            .withGroupKey(HystrixCommandGroupKey.Factory.asKey(config.group))
+            .andCommandKey(HystrixCommandKey.Factory.asKey(config.command))
             .andCommandPropertiesDefaults(
               HystrixCommandProperties.Setter()
-                .withExecutionIsolationThreadTimeoutInMilliseconds(configuration.timeout.toMillis.toInt)
+                .withExecutionIsolationThreadTimeoutInMilliseconds(config.timeout.toMillis.toInt)
             )
         )
 
@@ -105,7 +104,7 @@ object Hystrix {
     }
   }
 
-  private def create[A, D](providedName: String, configuration: HystrixConfiguration, chained: Chain[A, D], fallback: => Option[() => D])(implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] = {
+  private def create[A, D](providedName: String, configuration: HystrixConfig, chained: Chain[A, D], fallback: => Option[() => D])(implicit typeOut: TypeTagTree[Future[D]]): PartialLift[A, D, State, Future] = {
 
     import scala.language.higherKinds
 

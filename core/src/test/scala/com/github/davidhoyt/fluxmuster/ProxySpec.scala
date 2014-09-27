@@ -19,7 +19,7 @@ class ProxySpec extends UnitSpec {
         q
       }
     desugared.run("0") should be ("33")
-    desugared.chain should be (newLinkChain(linkS2L, linkInc2, linkMult1, linkInc2, linkMult1, linkInc1, (longToInt _).toLink /* proof */, linkMult2, linkDec1, linkMult2, linkDec1, linkMult2, linkDec1, linkI2S))
+    desugared.linkChain should be (newLinkChain(linkS2L, linkInc2, linkMult1, linkInc2, linkMult1, linkInc1, (longToInt _).toLink /* proof */, linkMult2, linkDec1, linkMult2, linkDec1, linkMult2, linkDec1, linkI2S))
 
     val onlyCombinesSpecifiedProxies =
       for {
@@ -30,7 +30,7 @@ class ProxySpec extends UnitSpec {
         p4 <- p1 combine p2 if true
       } yield p4
     onlyCombinesSpecifiedProxies.run("0") should be ("13")
-    onlyCombinesSpecifiedProxies.chain should be (newLinkChain(linkS2L, linkInc2, linkMult1, linkInc2, linkMult1, (longToInt _).toLink /* proof */, linkMult2, linkDec1, linkMult2, linkDec1, linkI2S))
+    onlyCombinesSpecifiedProxies.linkChain should be (newLinkChain(linkS2L, linkInc2, linkMult1, linkInc2, linkMult1, (longToInt _).toLink /* proof */, linkMult2, linkDec1, linkMult2, linkDec1, linkI2S))
     //println(foo.chain.asDefaultString)
 
     val combineWithTupled =
@@ -38,8 +38,8 @@ class ProxySpec extends UnitSpec {
         fromTuple <- (linkInc1, linkMult2Dec1).toLinkedProxy("fromTuple")
       } yield onlyCombinesSpecifiedProxies combine fromTuple
     combineWithTupled.run("0") should be ("33")
-    combineWithTupled.chain should be (newLinkChain(linkS2L, linkInc2, linkMult1, linkInc2, linkMult1, linkInc1, (longToInt _).toLink /* proof */, linkMult2, linkDec1, linkMult2, linkDec1, linkMult2, linkDec1, linkI2S))
-    combineWithTupled.chain should be (desugared.chain)
+    combineWithTupled.linkChain should be (newLinkChain(linkS2L, linkInc2, linkMult1, linkInc2, linkMult1, linkInc1, (longToInt _).toLink /* proof */, linkMult2, linkDec1, linkMult2, linkDec1, linkMult2, linkDec1, linkI2S))
+    combineWithTupled.linkChain should be (desugared.linkChain)
     combineWithTupled should be (desugared)
   }
 }

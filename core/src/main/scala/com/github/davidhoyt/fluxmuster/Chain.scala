@@ -9,16 +9,14 @@ trait Chain[In, Out] {
   def asDefaultString: String
   def asShortString: String
 
-  def chain: LinkChain
+  def linkChain: LinkChain
   def runner: In => Out
 
-  def runChain(in: In): Out = {
-    val ran = chain.foldLeft(in: Any) {
-      case (soFar, next) =>
-        next.runAny(soFar)
-    }
-    ran.asInstanceOf[Out]
-  }
+  def runChain(in: In): Out =
+      runChainAny(in).asInstanceOf[Out]
+
+  def runChainAny(in: Any): Any =
+    linkChain.runLinkChainAny(in)
 
   def runAny(in: Any): Any =
     runner(in.asInstanceOf[In])

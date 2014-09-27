@@ -11,7 +11,7 @@ trait LiftOps[State, Into[_]] {
 
   private val logger = Logger(LoggerFactory.getLogger(getClass))
 
-  def liftRunner[A, D](linksChain: LinkChain, opsChain: ChainedLiftOps[Into], runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Into[D]
+  def liftRunner[A, D](linkChain: LinkChain, opsChain: ChainedLiftOps[Into], runner: A => D)(implicit state: State, typeIn: TypeTagTree[A], typeOut: TypeTagTree[D]): A => Into[D]
   def point[A](given: => A): Into[A]
   def flatten[A](given: Into[Into[A]])(implicit state: State): Into[A]
   def map[A, B](given: Into[A])(fn: A => B)(implicit state: State): Into[B]

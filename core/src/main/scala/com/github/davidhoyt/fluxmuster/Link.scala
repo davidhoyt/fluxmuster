@@ -24,7 +24,7 @@ sealed trait Link[In, Out]
   implicit val typeIn: TypeTagTree[In]
   implicit val typeOut: TypeTagTree[Out]
 
-  implicit val chain: LinkChain
+  implicit val linkChain: LinkChain
 
   val sideEffects: ChainSideEffects[Out]
 
@@ -101,7 +101,7 @@ sealed trait Link[In, Out]
     andThen(Link(other)(tOtherIn, tOtherOut))(thisOutToOtherIn)
 
   def andThen[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Link[In, OtherOut] =
-    new Link.Build[In, OtherOut]("~>", Link.this.chain ++ (if (Link.this.typeOut != other.typeIn) Seq(Link(thisOutToOtherIn)(Link.this.typeOut, other.typeIn)) else Seq()), other.chain, Link.linkCombined)(Link.this.typeIn, other.typeOut) {
+    new Link.Build[In, OtherOut]("~>", Link.this.linkChain ++ (if (Link.this.typeOut != other.typeIn) Seq(Link(thisOutToOtherIn)(Link.this.typeOut, other.typeIn)) else Seq()), other.linkChain, Link.linkCombined)(Link.this.typeIn, other.typeOut) {
       protected def runLink[A, B](a: A)(implicit aToIn: A => In, outToB: OtherOut => B): B =
         other.apply(Link.this.apply(aToIn(a))(identity, thisOutToOtherIn))
     }
@@ -122,7 +122,7 @@ sealed trait Link[In, Out]
     compose(Link(other)(tOtherIn, tOtherOut))(otherOutToThisIn)
 
   def compose[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Link[OtherIn, Out] =
-    new Link.Build[OtherIn, Out]("<~", other.chain ++ (if (other.typeOut != Link.this.typeIn) Seq(Link(otherOutToThisIn)(other.typeOut, Link.this.typeIn)) else Seq()), Link.this.chain, Link.linkCombined)(other.typeIn, Link.this.typeOut) {
+    new Link.Build[OtherIn, Out]("<~", other.linkChain ++ (if (other.typeOut != Link.this.typeIn) Seq(Link(otherOutToThisIn)(other.typeOut, Link.this.typeIn)) else Seq()), Link.this.linkChain, Link.linkCombined)(other.typeIn, Link.this.typeOut) {
       protected def runLink[A, B](a: A)(implicit aToIn: A => OtherIn, outToB: Out => B): B =
         Link.this.apply(other.apply(aToIn(a))(identity, otherOutToThisIn))
     }
@@ -147,7 +147,7 @@ object Link {
   import Chains._
 
   private[fluxmuster] abstract case class Build[In, Out](name: String, mine: LinkChain, otherLink: LinkChain, chaining: FnChainLink, override val asShortString: String = null, sideEffects: ChainSideEffects[Out] = SideEffectsChainEmpty[Out])(implicit val typeIn: TypeTagTree[In], val typeOut: TypeTagTree[Out]) extends Link[In, Out] with Named {
-    lazy val chain =
+    lazy val linkChain =
       chainTogether(this, mine, otherLink)
 
     def chainTogether(instance: LinkAny, mine: LinkChain, other: LinkChain): LinkChain =
@@ -156,8 +156,8 @@ object Link {
 
   private[fluxmuster] def linkCombined(instance: LinkAny, mine: LinkChain, other: LinkChain): LinkChain =
     (mine ++ other).foldLeft(LinkChainEmpty) {
-      case (seq, p) if p.chain.nonEmpty =>
-        seq :+ p.chain.head
+      case (seq, p) if p.linkChain.nonEmpty =>
+        seq :+ p.linkChain.head
       case (seq, _) =>
         seq
     }
@@ -175,7 +175,7 @@ object Link {
     create[In, Out](name, LinkChainEmpty, LinkChainEmpty, linkProvided _, SideEffectsChainEmpty[Out])(fn)(typeIn, typeOut)
 
   def withSideEffects[In, Out](name: String, link: Link[In, Out])(sideEffects: SideEffecting[Out]*): Link[In, Out] =
-    create(name, link.chain, LinkChainEmpty, linkProvided _, sideEffects.toVector)(link.run)(link.typeIn, link.typeOut)
+    create(name, link.linkChain, LinkChainEmpty, linkProvided _, sideEffects.toVector)(link.run)(link.typeIn, link.typeOut)
 
   def create[In, Out](mine: LinkChain, other: LinkChain, chaining: FnChainLink)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
     create[In, Out](fn.toString(), mine, other, chaining, SideEffectsChainEmpty[Out])(fn)(typeIn, typeOut)

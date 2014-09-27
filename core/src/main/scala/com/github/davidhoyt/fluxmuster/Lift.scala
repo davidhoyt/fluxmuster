@@ -192,18 +192,16 @@ case class Lift[DownstreamIn, DownstreamOut, UpstreamIn, UpstreamOut, State, Fro
 object Lift {
   import Chains._
 
-  def link[A, B, C, D, S, F[_], G[_]](name: String, chain: LinkChain, link: Link[A, G[D]], proxy: LinkedProxy[A, B, C, D], liftChain: LiftChain, state: S, ops: LiftOps[S, G], rewireOnFlatMap: Boolean = false, mapState: (S, LiftChain) => S = (s: S, _: LiftChain) => s)(implicit converter: F -> G, typeState: TypeTagTree[S], typeFofD: TypeTagTree[F[D]]): Lift[A, B, C, D, S, F, G] =
-    Lift[A, B, C, D, S, F, G](name, chain, link, proxy, liftChain, state, ops)(rewireOnFlatMap, mapState)
+  def link[A, B, C, D, S, F[_], G[_]](name: String, linkChain: LinkChain, link: Link[A, G[D]], proxy: LinkedProxy[A, B, C, D], liftChain: LiftChain, state: S, ops: LiftOps[S, G], rewireOnFlatMap: Boolean = false, mapState: (S, LiftChain) => S = (s: S, _: LiftChain) => s)(implicit converter: F -> G, typeState: TypeTagTree[S], typeFofD: TypeTagTree[F[D]]): Lift[A, B, C, D, S, F, G] =
+    Lift[A, B, C, D, S, F, G](name, linkChain, link, proxy, liftChain, state, ops)(rewireOnFlatMap, mapState)
 
   def proxy[A, B, C, D, S, F[_], G[_]](name: String, proxy: LinkedProxy[A, B, C, D], liftChain: LiftChain, state: S, ops: LiftOps[S, G], rewireOnFlatMap: Boolean = false, mapState: (S, LiftChain) => S = (s: S, _: LiftChain) => s)(implicit converter: F -> G, typeState: TypeTagTree[S], typeFOfD: TypeTagTree[F[D]], typeGOfD: TypeTagTree[G[D]]): Lift[A, B, C, D, S, F, G] = {
     val proxyLink =
       proxy.toLink
     val liftedRunner =
-      Link(ops.liftRunner[A, D](proxyLink.chain, ChainedLiftOps(ops.asLiftOpsAny), proxyLink.runner)(state, proxyLink.typeIn, proxyLink.typeOut))(proxyLink.typeIn, typeGOfD)
-    val liftedLinkChain =
-      newLinkChain(proxy.downstream, proxy.linkDownstreamToUpstream, proxy.upstream)
+      Link(ops.liftRunner[A, D](proxy.linkChain, ChainedLiftOps(ops.asLiftOpsAny), proxyLink.runner)(state, proxyLink.typeIn, proxyLink.typeOut))(proxyLink.typeIn, typeGOfD)
     val lifted =
-      link[A, B, C, D, S, F, G](name, liftedLinkChain, liftedRunner, proxy, liftChain, state, ops, rewireOnFlatMap, mapState)
+      link[A, B, C, D, S, F, G](name, newLinkChain(liftedRunner), liftedRunner, proxy, liftChain, state, ops, rewireOnFlatMap, mapState)
     lifted
   }
 

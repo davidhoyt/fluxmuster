@@ -1,5 +1,7 @@
 package com.github.davidhoyt.fluxmuster
 
+import akka.actor.ActorSystem
+
 class LiftSpec extends UnitSpec {
   import scala.concurrent.Await
   import scala.concurrent.duration._
@@ -125,8 +127,8 @@ class LiftSpec extends UnitSpec {
 
     val simpleLiftMapWithLink =
       for {
-        r1 <- linkS2L ~> linkInc2Mult1 lift Serial("s1")
-      } yield r1
+        l1 <- linkS2L ~> linkInc2Mult1 lift Serial("s1")
+      } yield l1
 
     val simpleLiftFlatMapDesugared =
       linkS2L ~> linkInc2Mult1 lift Serial("s1") flatMap { a =>
@@ -137,19 +139,8 @@ class LiftSpec extends UnitSpec {
 
     val simpleLiftFlatMap =
       for {
-        r1 <- linkS2L ~> linkInc2Mult1 |> Serial("r1")
-        r2 <- r1 |> Serial("r2")
-      } yield r2
-  }
-
-  it should s"function properly with Hystrix" in {
-    import Implicits._
-
-    val foo =
-      for {
-        s <- p1 <~> p2 <~> p3 <~> (((l: Long) => { /*Thread.sleep(3000L);*/ l }, identity[Int] _))
-        f <- s |> Serial() |> Hystrix.withFallback(config = HystrixConfiguration(timeout = 1.second))("boo!") |> Async()
-      } yield f
-    Await.result(foo.run("0"), 10.seconds) should be ("33")
+        l1 <- linkS2L ~> linkInc2Mult1 |> Serial("r1")
+        l2 <- l1 |> Serial("r2")
+      } yield l2
   }
 }
