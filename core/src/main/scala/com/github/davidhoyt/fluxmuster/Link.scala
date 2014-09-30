@@ -1,5 +1,7 @@
 package com.github.davidhoyt.fluxmuster
 
+import scala.collection.generic.CanBuildFrom
+
 /**
  * Represents a quasi-polymorphic function that can be composed with other
  * links and implicitly converted functions.
@@ -129,6 +131,7 @@ sealed trait Link[In, Out]
   def compose[OtherIn, OtherOut](other: OtherIn => OtherOut)(implicit otherOutToThisIn: OtherOut => In, tOtherIn: TypeTagTree[OtherIn], tOtherOut: TypeTagTree[OtherOut]): Link[OtherIn, Out] =
     compose(Link(other)(tOtherIn, tOtherOut))(otherOutToThisIn)
 
+  //TODO: Determine if a macro can be used to determine if an implicit is identity coming from predef??
   def compose[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Link[OtherIn, Out] =
     //The addition to the linkChain based on types is not sound since you could have a function
     //that's provided that is not the identity function but yields a different value of the same
@@ -140,6 +143,35 @@ sealed trait Link[In, Out]
       protected def runLink[A, B](a: A)(implicit aToIn: A => OtherIn, outToB: Out => B): B =
         Link.this.apply(other.apply(aToIn(a))(identity, otherOutToThisIn))
     }
+
+  import scala.concurrent.{Await, Awaitable, Future, ExecutionContext}
+  import scala.concurrent.duration.Duration
+  import scala.language.higherKinds
+
+  def #>[OtherIn, OtherOut](other: Link[OtherIn, OtherOut]*)(implicit context: ExecutionContext, thisOutToOtherIn: Out => OtherIn, typeIn: TypeTagTree[OtherIn], typeOut: TypeTagTree[Future[Seq[OtherOut]]]): Link[In, Future[Seq[OtherOut]]] =
+    tee(other)
+
+  def tee[OtherIn, OtherOut](other: Link[OtherIn, OtherOut]*)(implicit context: ExecutionContext, thisOutToOtherIn: Out => OtherIn, typeIn: TypeTagTree[OtherIn], typeOut: TypeTagTree[Future[Seq[OtherOut]]]): Link[In, Future[Seq[OtherOut]]] =
+    tee(other)
+
+  def #>[OtherIn, OtherOut, M[X] <: Traversable[X]](other: M[Link[OtherIn, OtherOut]])(implicit context: ExecutionContext, thisOutToOtherIn: Out => OtherIn, cbf: CanBuildFrom[M[OtherOut], OtherOut, M[OtherOut]], typeIn: TypeTagTree[OtherIn], typeOut: TypeTagTree[Future[M[OtherOut]]]): Link[In, Future[M[OtherOut]]] =
+    tee(other)
+
+  def tee[OtherIn, OtherOut, M[X] <: Traversable[X]](other: M[Link[OtherIn, OtherOut]])(implicit context: ExecutionContext, thisOutToOtherIn: Out => OtherIn, cbf: CanBuildFrom[M[OtherOut], OtherOut, M[OtherOut]], typeIn: TypeTagTree[OtherIn], typeOut: TypeTagTree[Future[M[OtherOut]]]): Link[In, Future[M[OtherOut]]] =
+    andThen(Link("tee")((next: OtherIn) => {
+      val results =
+        for {
+          l <- other
+        } yield Future(l.run(next))
+
+      Future.sequence(results) map (x => (cbf() ++= x).result())
+    }))
+
+  def %>[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit atMost: Duration, evidence: Out => Awaitable[OtherIn]): Link[In, OtherOut] =
+    await(other)
+
+  def await[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit atMost: Duration, evidence: Out => Awaitable[OtherIn]): Link[In, OtherOut] =
+    andThen(other)(x => Await.result(evidence(x), atMost))
 
   override val hashCode: Int =
     (typeIn.hashCode() * 31) +

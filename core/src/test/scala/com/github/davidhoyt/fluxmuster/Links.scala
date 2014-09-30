@@ -38,4 +38,17 @@ object Links {
 
   implicit def intToString(x: Int) = x.toString
   implicit def longToInt(x: Long) = x.toInt
+
+  import scala.concurrent.Future
+  import scala.concurrent.duration._
+  import scala.concurrent.ExecutionContext.Implicits.global
+  implicit val atMost = 10.seconds
+
+  val linkFutureSum: Link[Future[Seq[Long]], Future[Long]] =
+    ((x: Future[Seq[Long]]) => x map { values => logger.debug(s"linkSum: sum($values)"); values.sum}).toLink("linkSum")
+
+  val linkSum: Link[Seq[Long], Long] =
+    ((values: Seq[Long]) => {logger.debug(s"linkSum: sum($values)"); values.sum}).toLink("linkSum")
+
+  val linkS2Sum = linkS2L tee (linkInc2Mult1, linkInc1) await linkSum
 }
