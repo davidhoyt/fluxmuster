@@ -1,6 +1,6 @@
 import SimpleSettings._
 
-lazy val _all = module("all")(
+lazy val _all = module("fluxmuster")(
   base      = ".",
   publish   = false,
   aggregate = Seq(macros, core)

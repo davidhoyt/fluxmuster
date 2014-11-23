@@ -7,7 +7,7 @@ object Links {
 
   import scala.language.implicitConversions
 
-  private val logger = Logger(LoggerFactory.getLogger(Macros.simpleNameOf[Links.type]))
+  private val logger: Logger = Logger(LoggerFactory.getLogger(Macros.simpleNameOf[Links.type]))
 
   val linkS2L: Link[String, Long] =
     ((x: String) => {logger.debug(s"linkS2L: '$x'.toLong"); x.toLong}).toLink("linkS2L")
@@ -36,8 +36,8 @@ object Links {
   val linkInc1: Link[Long, Long] =
     ((x: Long) => {logger.debug(s"linkInc1: $x + 1L"); x + 1L}).toLink("linkInc1")
 
-  implicit def intToString(x: Int) = x.toString
-  implicit def longToInt(x: Long) = x.toInt
+  implicit def intToString(x: Int): String = x.toString
+  implicit def longToInt(x: Long): Int = x.toInt
 
   import scala.concurrent.Future
   import scala.concurrent.duration._

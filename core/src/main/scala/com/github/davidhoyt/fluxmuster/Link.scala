@@ -1,70 +1,43 @@
 package com.github.davidhoyt.fluxmuster
 
-import scala.collection.generic.CanBuildFrom
+trait Named {
+  val name: String
+}
 
-/**
- * Represents a quasi-polymorphic function that can be composed with other
- * links and implicitly converted functions.
- *
- * Input and output types can be implicitly converted to and their type
- * information recorded for runtime reflection and all composed links are
- * tracked as a chain of links/functions that represent the combined
- * path to the current link.
- *
- * Assuming all links in a composed chain are non-side-effecting, then
- * this allows for runtime introspection and possible execution plans
- * with plan optimizations and reordering as well as partitioning and
- * concurrent execution.
- */
-sealed trait Link[In, Out]
-  extends Chain[In, Out]
-  with Run[In, Out] { self: Named =>
+class ListArray[+T](private[this] val existing: Array[T]) {
+  import scala.reflect.ClassTag
 
-  import scala.collection._
-  import Chains._
+  def array[U >: T]: Array[U] = existing.asInstanceOf[Array[U]]
+  def size: Int = existing.length
+  def length: Int = existing.length
+  def foldLeft[A](initial: A)(fn: (A, T) => A): A = array.foldLeft(initial)(fn)
+  def ++[U >: T : ClassTag](other: ListArray[U]): ListArray[U] = new ListArray(existing ++: other.array)
+  def +:[U >: T : ClassTag](addl: U) = new ListArray(addl +: array)
+}
 
-  implicit val typeIn: TypeTagTree[In]
-  implicit val typeOut: TypeTagTree[Out]
+object ListArray {
+  import scala.reflect.ClassTag
 
-  implicit val linkChain: LinkChain
+  def apply[T : ClassTag](from: T*): ListArray[T] = new ListArray(from.toArray)
+  def apply[T](from: Array[T]): ListArray[T] = new ListArray(from)
+}
 
-  val sideEffects: ChainSideEffects[Out]
+trait Link[-In, +Out] extends Named {
+  protected def process[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B
 
-  val isIdentity = false
+  val sequence: ListArray[LinkAny] = ListArray(Link.this)
 
-  protected def runLink[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B
+  protected[this] val typeIn: TypeTagTree[In]
+  protected[this] val typeOut: TypeTagTree[Out]
 
-  override def apply[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B = {
-    val out = runLink(a)(aToIn, identity)
-    if (sideEffects.nonEmpty)
-      sideEffects foreach (_.apply(out))
-    outToB(out)
-  }
 
-  def run(in: In): Out =
-    apply(in)(identity, identity)
+  implicit def in[In0 <: In]: TypeTagTree[In0] = typeIn.asInstanceOf[TypeTagTree[In0]]
+  implicit def out[Out0 >: Out]: TypeTagTree[Out0] = typeOut.asInstanceOf[TypeTagTree[Out0]]
 
-  def foreach(fn: Out => Unit): Link[In, Out] =
-    Link.withSideEffects(name, this)(sideEffects :+ fn :_*)
+  protected[this] def asShortString: String = null
 
-  def map[A](fn: Out => A)(implicit tA: TypeTagTree[A]): Link[In, A] =
-    andThen(fn)(identity, typeOut, tA)
-
-  def flatMap[A, B](fn: Out => Link[A, B])(implicit outToA: Out => A, tB: TypeTagTree[B]): Link[In, B] = {
-    //Necessarily does not add to the chain and instead
-    //creates a new chain where only this link is in it.
-    Link((in: In) => {
-      val out = Link.this.run(in)
-      val newLink = fn(out)
-      newLink.run(outToA(out))
-    })(typeIn, tB)
-  }
-
-  def asShortString: String =
-    null
-
-  lazy val asDefaultString =
-    s"$name[${typeIn.toShortString}, ${typeOut.toShortString}]"
+  lazy val asDefaultString = s"$name"
+  override def toString = toShortString
 
   lazy val toShortString = {
     val short = asShortString
@@ -74,79 +47,77 @@ sealed trait Link[In, Out]
       short
   }
 
-  override val toString =
-    toShortString
+  override def hashCode: Int =
+    (typeIn.hashCode() * 31) +
+    typeOut.hashCode()
 
-  lazy val runner =
-    toFunction
-
-  implicit val toFunction: In => Out =
-    run
-
-  implicit lazy val toLinkedProxy: LinkedProxy[In, In, Out, Out] =
-    Proxy.linked(name, Link.identity[In], Link.identity[Out], toFunction)
-
-  def asFunction[A, B](implicit aToIn: A => In, outToB: Out => B): A => B =
-    (a: A) => apply(aToIn(a))(identity, outToB)
-
-  def ~>[OtherIn, OtherOut](other: OtherIn => OtherOut)(implicit thisOutToOtherIn: Out => OtherIn, tOtherIn: TypeTagTree[OtherIn], tOtherOut: TypeTagTree[OtherOut]): Link[In, OtherOut] =
-    andThen(Link(other)(tOtherIn, tOtherOut))(thisOutToOtherIn)
-
-  def ~>[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Link[In, OtherOut] =
-    andThen(other)(thisOutToOtherIn)
-
-  def down[OtherIn, OtherOut](other: OtherIn => OtherOut)(implicit thisOutToOtherIn: Out => OtherIn, tOtherIn: TypeTagTree[OtherIn], tOtherOut: TypeTagTree[OtherOut]): Link[In, OtherOut] =
-    andThen(Link(other)(tOtherIn, tOtherOut))(thisOutToOtherIn)
-
-  def down[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Link[In, OtherOut] =
-    andThen(other)(thisOutToOtherIn)
-
-  def andThen[OtherIn, OtherOut](other: OtherIn => OtherOut)(implicit thisOutToOtherIn: Out => OtherIn, tOtherIn: TypeTagTree[OtherIn], tOtherOut: TypeTagTree[OtherOut]): Link[In, OtherOut] =
-    andThen(Link(other)(tOtherIn, tOtherOut))(thisOutToOtherIn)
-
-  def andThen[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Link[In, OtherOut] =
-    //The addition to the linkChain based on types is not sound since you could have a function
-    //that's provided that is not the identity function but yields a different value of the same
-    //type. This would filter that out. In practice it would be very rare for this to occur and
-    //if it becomes a problem, it will need to always be added to the chain. Unfortunately this
-    //would proliferate a lot of identity functions for the very few cases where it could be useful.
-    //In those cases it's suggested you simply compose a new link using the function in question.
-    new Link.Build[In, OtherOut]("~>", Link.this.linkChain ++ (if (Link.this.typeOut != other.typeIn) Seq(Link(thisOutToOtherIn)(Link.this.typeOut, other.typeIn)) else Seq()), other.linkChain, Link.linkCombined)(Link.this.typeIn, other.typeOut) {
-      protected def runLink[A, B](a: A)(implicit aToIn: A => In, outToB: OtherOut => B): B =
-        other.apply(Link.this.apply(aToIn(a))(identity, thisOutToOtherIn))
+  override def equals(other: Any): Boolean =
+    other match {
+      case ref: AnyRef =>
+        ref eq Link.this
+      case _ =>
+        false
     }
 
-  def <~[OtherIn, OtherOut](other: OtherIn => OtherOut)(implicit otherOutToThisIn: OtherOut => In, tOtherIn: TypeTagTree[OtherIn], tOtherOut: TypeTagTree[OtherOut]): Link[OtherIn, Out] =
-    compose(Link(other)(tOtherIn, tOtherOut))(otherOutToThisIn)
+  def apply[In0, Out0](a: In0)(implicit aToIn: In0 => In, outToB: Out => Out0): Out0 = {
+    val out = process(a)(aToIn, identity)
+    outToB(out)
+  }
 
-  def <~[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Link[OtherIn, Out] =
-    compose(other)(otherOutToThisIn)
+  def run(in: In): Out = apply(in)(identity, identity)
+  implicit val toFunction: In => Out = run
 
-  def up[OtherIn, OtherOut](other: OtherIn => OtherOut)(implicit otherOutToThisIn: OtherOut => In, tOtherIn: TypeTagTree[OtherIn], tOtherOut: TypeTagTree[OtherOut]): Link[OtherIn, Out] =
-    compose(Link(other)(tOtherIn, tOtherOut))(otherOutToThisIn)
+  def asFunction[In0, Out0](implicit aToIn: In0 => In, outToB: Out => Out0): In0 => Out0 =
+    (a: In0) => apply(aToIn(a))(identity, outToB)
 
-  def up[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Link[OtherIn, Out] =
-    compose(other)(otherOutToThisIn)
-
-  def compose[OtherIn, OtherOut](other: OtherIn => OtherOut)(implicit otherOutToThisIn: OtherOut => In, tOtherIn: TypeTagTree[OtherIn], tOtherOut: TypeTagTree[OtherOut]): Link[OtherIn, Out] =
-    compose(Link(other)(tOtherIn, tOtherOut))(otherOutToThisIn)
-
-  //TODO: Determine if a macro can be used to determine if an implicit is identity coming from predef??
-  def compose[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Link[OtherIn, Out] =
-    //The addition to the linkChain based on types is not sound since you could have a function
-    //that's provided that is not the identity function but yields a different value of the same
-    //type. This would filter that out. In practice it would be very rare for this to occur and
-    //if it becomes a problem, it will need to always be added to the chain. Unfortunately this
-    //would proliferate a lot of identity functions for the very few cases where it could be useful.
-    //In those cases it's suggested you simply compose a new link using the function in question.
-    new Link.Build[OtherIn, Out]("<~", other.linkChain ++ (if (other.typeOut != Link.this.typeIn) Seq(Link(otherOutToThisIn)(other.typeOut, Link.this.typeIn)) else Seq()), Link.this.linkChain, Link.linkCombined)(other.typeIn, Link.this.typeOut) {
-      protected def runLink[A, B](a: A)(implicit aToIn: A => OtherIn, outToB: Out => B): B =
-        Link.this.apply(other.apply(aToIn(a))(identity, otherOutToThisIn))
+  def andThen[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Link[In, OtherOut] = {
+    val ref = Link.this
+    new Link[In, OtherOut] {
+      val name = s"${ref.name} ~> ${other.name}"
+      override val sequence = ref.sequence ++ other.sequence
+      override protected[this] val typeIn: TypeTagTree[In] = ref.in
+      override protected[this] val typeOut: TypeTagTree[OtherOut] = other.out
+      override protected def process[A, B](a: A)(implicit aToIn: (A) => In, outToB: (OtherOut) => B): B =
+        other.apply(ref.apply(aToIn(a))(identity, thisOutToOtherIn))
     }
+  }
 
+  def compose[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Link[OtherIn, Out] = {
+    val ref = Link.this
+    new Link[OtherIn, Out] {
+      val name = s"${other.name} ~> ${ref.name}"
+      override val sequence = other.sequence ++ ref.sequence
+      override protected[this] val typeIn: TypeTagTree[OtherIn] = other.in
+      override protected[this] val typeOut: TypeTagTree[Out] = ref.out
+      override protected def process[A, B](a: A)(implicit aToIn: A => OtherIn, outToB: Out => B): B =
+        ref.apply(other.apply(aToIn(a))(identity, otherOutToThisIn))
+    }
+  }
+
+  import scala.collection.generic.CanBuildFrom
   import scala.concurrent.{Await, Awaitable, Future, ExecutionContext}
   import scala.concurrent.duration.Duration
   import scala.language.higherKinds
+
+  def tee[OtherIn, OtherOut, M[X] <: Traversable[X]](other: M[Link[OtherIn, OtherOut]])(implicit context: ExecutionContext, thisOutToOtherIn: Out => OtherIn, cbf: CanBuildFrom[M[OtherOut], OtherOut, M[OtherOut]], typeIn: TypeTagTree[OtherIn], typeOut: TypeTagTree[Future[M[OtherOut]]]): Link[In, Future[M[OtherOut]]] =
+    andThen(Implicits.functionToLink("tee") { next: OtherIn =>
+      val results =
+        for {
+          l <- other
+        } yield Future(l.run(next))
+
+      Future.sequence(results) map (x => (cbf() ++= x).result())
+    })
+
+  def await[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit atMost: Duration, evidence: Out => Awaitable[OtherIn]): Link[In, OtherOut] =
+    andThen(other)(x => Await.result(evidence(x), atMost))
+
+
+  def ~>[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit thisOutToOtherIn: Out => OtherIn): Link[In, OtherOut] =
+    andThen(other)
+
+  def <~[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit otherOutToThisIn: OtherOut => In): Link[OtherIn, Out] =
+    compose(other)
 
   def #>[OtherIn, OtherOut](other: Link[OtherIn, OtherOut]*)(implicit context: ExecutionContext, thisOutToOtherIn: Out => OtherIn, typeIn: TypeTagTree[OtherIn], typeOut: TypeTagTree[Future[Seq[OtherOut]]]): Link[In, Future[Seq[OtherOut]]] =
     tee(other)
@@ -157,87 +128,10 @@ sealed trait Link[In, Out]
   def #>[OtherIn, OtherOut, M[X] <: Traversable[X]](other: M[Link[OtherIn, OtherOut]])(implicit context: ExecutionContext, thisOutToOtherIn: Out => OtherIn, cbf: CanBuildFrom[M[OtherOut], OtherOut, M[OtherOut]], typeIn: TypeTagTree[OtherIn], typeOut: TypeTagTree[Future[M[OtherOut]]]): Link[In, Future[M[OtherOut]]] =
     tee(other)
 
-  def tee[OtherIn, OtherOut, M[X] <: Traversable[X]](other: M[Link[OtherIn, OtherOut]])(implicit context: ExecutionContext, thisOutToOtherIn: Out => OtherIn, cbf: CanBuildFrom[M[OtherOut], OtherOut, M[OtherOut]], typeIn: TypeTagTree[OtherIn], typeOut: TypeTagTree[Future[M[OtherOut]]]): Link[In, Future[M[OtherOut]]] =
-    andThen(Link("tee")((next: OtherIn) => {
-      val results =
-        for {
-          l <- other
-        } yield Future(l.run(next))
-
-      Future.sequence(results) map (x => (cbf() ++= x).result())
-    }))
-
   def %>[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit atMost: Duration, evidence: Out => Awaitable[OtherIn]): Link[In, OtherOut] =
     await(other)
-
-  def await[OtherIn, OtherOut](other: Link[OtherIn, OtherOut])(implicit atMost: Duration, evidence: Out => Awaitable[OtherIn]): Link[In, OtherOut] =
-    andThen(other)(x => Await.result(evidence(x), atMost))
-
-  override val hashCode: Int =
-    (typeIn.hashCode() * 31) +
-    typeOut.hashCode()
-
-  override def equals(other: Any): Boolean =
-    other match {
-      case ref: Link[_, _] if isIdentity && ref.isIdentity && typeIn == ref.typeIn && typeOut == ref.typeOut =>
-        true
-      case ref: AnyRef =>
-        ref eq Link.this
-      case _ =>
-        false
-    }
 }
 
 object Link {
-  import scala.collection.immutable
-  import Chains._
 
-  private[fluxmuster] abstract case class Build[In, Out](name: String, mine: LinkChain, otherLink: LinkChain, chaining: FnChainLink, override val asShortString: String = null, sideEffects: ChainSideEffects[Out] = SideEffectsChainEmpty[Out], override val isIdentity: Boolean = false)(implicit val typeIn: TypeTagTree[In], val typeOut: TypeTagTree[Out]) extends Link[In, Out] with Named {
-    lazy val linkChain =
-      chainTogether(this, mine, otherLink)
-
-    def chainTogether(instance: LinkAny, mine: LinkChain, other: LinkChain): LinkChain =
-      chaining(instance, mine, other)
-  }
-
-  private[fluxmuster] def linkCombined(instance: LinkAny, mine: LinkChain, other: LinkChain): LinkChain =
-    (mine ++ other).foldLeft(LinkChainEmpty) {
-      case (seq, p) if p.linkChain.nonEmpty =>
-        seq :+ p.linkChain.head
-      case (seq, _) =>
-        seq
-    }
-    //.filterNot(_.isIdentity)
-
-  private[fluxmuster] def linkProvided(instance: LinkAny, mine: LinkChain, other: LinkChain): LinkChain =
-    if ((mine eq null) || mine.isEmpty)
-      immutable.Vector(instance)
-    else
-      mine
-
-  def apply[In, Out](fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
-    create[In, Out](LinkChainEmpty, LinkChainEmpty, linkProvided _)(fn)(typeIn, typeOut)
-
-  def apply[In, Out](name: String)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
-    create[In, Out](name, LinkChainEmpty, LinkChainEmpty, linkProvided _, SideEffectsChainEmpty[Out])(fn)(typeIn, typeOut)
-
-  def withSideEffects[In, Out](name: String, link: Link[In, Out])(sideEffects: SideEffecting[Out]*): Link[In, Out] =
-    create(name, link.linkChain, LinkChainEmpty, linkProvided _, sideEffects.toVector)(link.run)(link.typeIn, link.typeOut)
-
-  def create[In, Out](mine: LinkChain, other: LinkChain, chaining: FnChainLink)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
-    create[In, Out](fn.toString(), mine, other, chaining, SideEffectsChainEmpty[Out])(fn)(typeIn, typeOut)
-
-  def create[In, Out](name: String, mine: LinkChain, other: LinkChain, chaining: FnChainLink)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
-    create[In, Out](name, mine, other, chaining, SideEffectsChainEmpty[Out])(fn)(typeIn, typeOut)
-
-  def create[In, Out](name: String, mine: LinkChain, other: LinkChain, chaining: FnChainLink, sideEffects: ChainSideEffects[Out], identity: Boolean = false)(fn: In => Out)(implicit typeIn: TypeTagTree[In], typeOut: TypeTagTree[Out]): Link[In, Out] =
-    new Build[In, Out](name, mine, other, chaining, s"${typeIn.toShortString} => ${typeOut.toShortString}", sideEffects, identity)(typeIn, typeOut) {
-      protected def runLink[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B =
-        outToB(fn(aToIn(a)))
-    }
-
-  def identity[A](implicit typeA: TypeTagTree[A]): Link[A, A] = {
-    val fn = Predef.identity[A] _
-    create[A, A](fn.toString(), LinkChainEmpty, LinkChainEmpty, linkProvided _, SideEffectsChainEmpty[A], identity = true)(fn)(typeA, typeA)
-  }
 }

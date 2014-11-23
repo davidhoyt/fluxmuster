@@ -4,6 +4,7 @@ import scala.util.Random
 
 object LinkGenerators {
   import org.scalacheck.{Arbitrary, Gen}
+  import Implicits._
 
   import scala.language.existentials
 
@@ -20,29 +21,29 @@ object LinkGenerators {
   val functions = Map[Seq[TypeTagTree[_]], Links](
     Types.Int ->
       Links(0, Vector(
-        Link("identity")(identity[Int] _),
-        Link("int2String")(Functions.int2String _),
-        Link("int2Long")(Functions.int2Long _),
-        Link("int2Double")(Functions.int2Double _)
+        (identity[Int] _).toLink("identity"),
+        (Functions.int2String _).toLink("int2String"),
+        (Functions.int2Long _).toLink("int2Long"),
+        (Functions.int2Double _).toLink("int2Double")
       )),
     Types.Long ->
       Links(0L, Vector(
-        Link("identity")(identity[Long] _),
-        Link("long2String")(Functions.long2String _),
-        Link("long2Int")(Functions.long2Int _),
-        Link("long2Double")(Functions.long2Double _)
+        (identity[Long] _).toLink("identity"),
+        (Functions.long2String _).toLink("long2String"),
+        (Functions.long2Int _).toLink("long2Int"),
+        (Functions.long2Double _).toLink("long2Double")
       )),
     Types.Double ->
       Links(0.0D, Vector(
-        Link("identity")(identity[Double] _),
-        Link("double2Int")(Functions.double2Int _),
-        Link("double2Long")(Functions.double2Long _)
+        (identity[Double] _).toLink("identity"),
+        (Functions.double2Int _).toLink("double2Int"),
+        (Functions.double2Long _).toLink("double2Long")
       )),
     Types.String ->
       Links("0", Vector(
-        Link("identity")(identity[String] _),
-        Link("string2Int")(Functions.string2Int _),
-        Link("string2Long")(Functions.string2Long _)
+        (identity[String] _).toLink("identity"),
+        (Functions.string2Int _).toLink("string2Int"),
+        (Functions.string2Long _).toLink("string2Long")
       ))
   ).toIndexedSeq
 
@@ -77,7 +78,7 @@ object LinkGenerators {
   }
 
   def combineRandomLink(link: Link[Any, Any]): Link[Any, Any] =
-    link ~> randomLink(link.typeOut)
+    link ~> randomLink(link.out)
 
   def genLink(maxChainSize: Int = 20): Gen[GeneratedLink] =
     for {
