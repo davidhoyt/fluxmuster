@@ -53,7 +53,7 @@ trait LowPriorityConversions {
    * function is in use. [[Link]] instances should ignore this during sequencing.
    *
    * @tparam T1 The input and return type which are the same
-   * @return A new implicit converter that conveys it's identity (a no-op)
+   * @return A new implicit converter that conveys its identity (a no-op)
    */
   @inline implicit def identity[T1]: T1 ==> T1 =
     new (T1 ==> T1) {

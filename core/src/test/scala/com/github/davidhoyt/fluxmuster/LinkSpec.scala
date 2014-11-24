@@ -1,5 +1,15 @@
 package com.github.davidhoyt.fluxmuster
 
+import scala.annotation.unchecked.uncheckedVariance
+
+trait Foo[-A] {
+  //@uncheckedVariance val a: A
+
+}
+trait A
+class B extends A
+class C extends A
+
 class LinkSpec extends UnitSpec {
   import Links._
 

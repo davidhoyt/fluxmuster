@@ -4,6 +4,8 @@ trait Named {
   val name: String
 }
 
+//TODO: AdjacencyListArray
+
 class ListArray[+T](private[this] val existing: Array[T]) {
   import scala.reflect.ClassTag
 
@@ -23,16 +25,14 @@ object ListArray {
 }
 
 trait Link[-In, +Out] extends Named {
+  import scala.annotation.unchecked.uncheckedVariance
+
   protected def process[A, B](a: A)(implicit aToIn: A => In, outToB: Out => B): B
 
   val sequence: ListArray[LinkAny] = ListArray(Link.this)
 
-  protected[this] val typeIn: TypeTagTree[In]
-  protected[this] val typeOut: TypeTagTree[Out]
-
-
-  implicit def in[In0 <: In]: TypeTagTree[In0] = typeIn.asInstanceOf[TypeTagTree[In0]]
-  implicit def out[Out0 >: Out]: TypeTagTree[Out0] = typeOut.asInstanceOf[TypeTagTree[Out0]]
+  implicit val in: TypeTagTree[In @uncheckedVariance]
+  implicit val out: TypeTagTree[Out @uncheckedVariance]
 
   protected[this] def asShortString: String = null
 
@@ -48,8 +48,8 @@ trait Link[-In, +Out] extends Named {
   }
 
   override def hashCode: Int =
-    (typeIn.hashCode() * 31) +
-    typeOut.hashCode()
+    (in.hashCode() * 31) +
+    out.hashCode()
 
   override def equals(other: Any): Boolean =
     other match {
@@ -74,9 +74,9 @@ trait Link[-In, +Out] extends Named {
     val ref = Link.this
     new Link[In, OtherOut] {
       val name = s"${ref.name} ~> ${other.name}"
+      override val in = ref.in
+      override val out = other.out
       override val sequence = ref.sequence ++ other.sequence
-      override protected[this] val typeIn: TypeTagTree[In] = ref.in
-      override protected[this] val typeOut: TypeTagTree[OtherOut] = other.out
       override protected def process[A, B](a: A)(implicit aToIn: (A) => In, outToB: (OtherOut) => B): B =
         other.apply(ref.apply(aToIn(a))(identity, thisOutToOtherIn))
     }
@@ -86,9 +86,9 @@ trait Link[-In, +Out] extends Named {
     val ref = Link.this
     new Link[OtherIn, Out] {
       val name = s"${other.name} ~> ${ref.name}"
+      override val in = other.in
+      override val out = ref.out
       override val sequence = other.sequence ++ ref.sequence
-      override protected[this] val typeIn: TypeTagTree[OtherIn] = other.in
-      override protected[this] val typeOut: TypeTagTree[Out] = ref.out
       override protected def process[A, B](a: A)(implicit aToIn: A => OtherIn, outToB: Out => B): B =
         ref.apply(other.apply(aToIn(a))(identity, otherOutToThisIn))
     }
@@ -102,9 +102,8 @@ trait Link[-In, +Out] extends Named {
   def tee[OtherIn, OtherOut, M[X] <: Traversable[X]](other: M[Link[OtherIn, OtherOut]])(implicit context: ExecutionContext, thisOutToOtherIn: Out => OtherIn, cbf: CanBuildFrom[M[OtherOut], OtherOut, M[OtherOut]], typeIn: TypeTagTree[OtherIn], typeOut: TypeTagTree[Future[M[OtherOut]]]): Link[In, Future[M[OtherOut]]] =
     andThen(Implicits.functionToLink("tee") { next: OtherIn =>
       val results =
-        for {
-          l <- other
-        } yield Future(l.run(next))
+        for (l <- other)
+          yield Future(l.run(next))
 
       Future.sequence(results) map (x => (cbf() ++= x).result())
     })

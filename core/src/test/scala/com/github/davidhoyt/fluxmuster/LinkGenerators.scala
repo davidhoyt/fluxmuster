@@ -80,7 +80,7 @@ object LinkGenerators {
   def combineRandomLink(link: Link[Any, Any]): Link[Any, Any] =
     link ~> randomLink(link.out)
 
-  def genLink(maxChainSize: Int = 20): Gen[GeneratedLink] =
+  def genLink(maxChainSize: Int = 100): Gen[GeneratedLink] =
     for {
       iNumberLinks <- Gen.choose(1, maxChainSize)
       (startDefault, startType) = randomType
